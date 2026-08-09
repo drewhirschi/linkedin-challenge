@@ -16,10 +16,11 @@ function Nav() {
 
   return (
     <>
-      {me.orgSlug && <a href={`/orgs/${me.orgSlug}`}>Leaderboard</a>}
-      {me.orgSlug && me.memberId != null && (
-        <a href={`/orgs/${me.orgSlug}/members/${me.memberId}`}>My standing</a>
-      )}
+      {/* "My standing" used to be a single link, from when a member had exactly one leaderboard.
+          A member can now be in several competitions, so their standings live on the home page —
+          one row per competition — and there is no single URL to point at. */}
+      <a href="/">Your challenges</a>
+      {me.orgSlug && <a href={`/orgs/${me.orgSlug}`}>Organization</a>}
       {/* The dashboard is the only thing the admin role unlocks. */}
       {me.isAdmin && me.orgSlug && <a href={`/orgs/${me.orgSlug}/admin`}>Manage</a>}
       <span className="muted">{me.displayName}</span>

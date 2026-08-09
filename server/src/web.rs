@@ -56,3 +56,37 @@ impl From<toasty::Error> for ApiError {
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
+
+/// A 404 page for a route that matched but whose *value* doesn't exist — an unknown org slug, a
+/// competition id from another org.
+///
+/// `not-found.tsx` handles URLs that match no route; this handles bad values inside routes that
+/// do, and it has to be plain HTML because middleware runs before any React bundle is chosen. Kept
+/// deliberately spare, and it loads the same stylesheet so it doesn't look like a different site.
+pub fn not_found_response(detail: &str) -> Response {
+    let html = format!(
+        r#"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not found</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<main>
+<h1>Not found</h1>
+<p class="lede">{detail}</p>
+<p><a class="btn" href="/">Back to your challenges</a></p>
+</main>
+</body>
+</html>"#
+    );
+    (
+        StatusCode::NOT_FOUND,
+        [(http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        html,
+    )
+        .into_response()
+}
