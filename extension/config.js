@@ -12,10 +12,11 @@ export const SESSION_COOKIE = "session";
 // How often to scrape, in minutes — twice a day. LinkedIn etiquette: keep this low.
 export const SYNC_PERIOD_MINUTES = 12 * 60;
 
-// Hard floor between two syncs, enforced in code rather than left to the alarm. Chrome can fire an
-// alarm early after a wake-from-sleep or a worker restart, and "Sync now" is a button a person can
-// hold down — without a floor, either one turns "twice a day" into a suggestion. Slightly under
-// 12h so a run that drifts a few minutes late doesn't push the next one past its slot.
+// Floor between two AUTOMATIC syncs, enforced in code rather than left to the alarm: Chrome can
+// fire an alarm early after a wake-from-sleep or a worker restart, which would quietly turn
+// "twice a day" into something more. Manual syncs bypass it — they're attended and deliberate.
+// Slightly under 12h so a run that drifts a few minutes late doesn't push the next one past its
+// slot.
 export const MIN_SYNC_INTERVAL_MINUTES = 11 * 60 + 30;
 
 // Random jitter (minutes) added to each scheduled run so many installs don't sync in lockstep.

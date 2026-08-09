@@ -29,7 +29,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM) runSync().catch(() => {});
 });
 
-/** Milliseconds until another sync is allowed; 0 when one is due now. */
+/** Milliseconds until the next AUTOMATIC sync is due; 0 when it's due now. */
 export async function msUntilSyncAllowed() {
   const { lastSyncAt } = await getState();
   if (!lastSyncAt) return 0;
@@ -39,16 +39,15 @@ export async function msUntilSyncAllowed() {
 
 // The core scrape+upload cycle. Records status/errors for the popup either way.
 //
-// `force` only bypasses the schedule, never the floor: we hit LinkedIn on the user's own session,
-// so the rate limit is an etiquette guarantee, not a preference.
-async function runSync() {
+// `manual` skips the twice-a-day floor. That floor exists to keep *background* traffic polite —
+// unattended alarm firings are what could hammer LinkedIn. A person clicking "Sync now" is
+// deliberate, attended, and self-limiting, so refusing them serves nobody.
+async function runSync({ manual = false } = {}) {
   if (!(await isLinked())) return { ok: false, error: "Not linked." };
 
-  const wait = await msUntilSyncAllowed();
-  if (wait > 0) {
-    const hours = Math.ceil(wait / 3_600_000);
-    return { ok: false, tooSoon: true, retryInMs: wait,
-             error: `Already synced recently — next sync in about ${hours}h.` };
+  if (!manual) {
+    const wait = await msUntilSyncAllowed();
+    if (wait > 0) return { ok: false, tooSoon: true, retryInMs: wait };
   }
 
   try {
@@ -107,7 +106,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           });
           await scheduleSync();
           // Kick off a first sync right away so the user sees data immediately.
-          runSync().catch(() => {});
+          runSync({ manual: true }).catch(() => {});
           sendResponse({ ok: true, data });
           break;
         }
@@ -126,7 +125,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sendResponse({ ok: true });
           break;
         case "SYNC_NOW":
-          sendResponse(await runSync());
+          sendResponse(await runSync({ manual: true }));
           break;
         case "UNLINK": {
           await clearLink();

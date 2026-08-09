@@ -55,8 +55,15 @@ so the LinkedIn Voyager calls in `linkedin.js` are unaffected.
 
 ## Cadence & etiquette
 
-Scrapes run about every 6 hours with random jitter, sequentially, with a short delay between
-requests. On repeated `401` it stops and asks the user to re-open LinkedIn rather than hammering.
+Automatic scrapes run twice a day with random jitter, sequentially, with a short delay between
+requests. A floor in code enforces that independently of the alarm, because Chrome can fire alarms
+early after a wake-from-sleep or a worker restart.
+
+**Manual "Sync now" bypasses the floor.** The limit exists to keep *unattended background* traffic
+polite; a person pressing a button is deliberate and self-limiting, so refusing them serves nobody.
+The popup shows when the next automatic sync is due either way.
+
+On repeated `401` it stops and asks the user to re-open LinkedIn rather than hammering.
 
 ## What the sync actually reads
 

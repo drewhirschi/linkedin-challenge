@@ -79,11 +79,6 @@ $("sync-btn").addEventListener("click", async () => {
   btn.textContent = "Syncing…";
   try {
     const res = await send({ type: "SYNC_NOW" });
-    // Being inside the twice-a-day window isn't a failure; say when the next one is due.
-    if (res.tooSoon) {
-      toast(res.error, "err");
-      return;
-    }
     if (!res.ok) throw new Error(res.error);
     toast(`Synced ${res.postsIngested} post(s).`, "ok");
   } catch (e) {
