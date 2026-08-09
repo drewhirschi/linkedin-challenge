@@ -9,7 +9,7 @@
     "orval": "orval --config ./orval.config.ts",
     "gen": "npm run dump && npm run orval",
     "generate:external": "node ./scripts/generate-external.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --project ../tsconfig.json"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",

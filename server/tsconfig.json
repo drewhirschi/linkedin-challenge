@@ -1,11 +1,13 @@
 {
-  // Editors resolve a .tsx file against the NEAREST tsconfig above it. Without this one, opening
-  // app/**/page.tsx finds no project at all: "@server/client" is unresolvable and every callback
-  // parameter is an implicit any — even though `npm run typecheck` in client/ passes, because that
-  // config reaches down into ../app. The typecheck and the editor were using different worlds.
+  // The single TypeScript project for this app. It lives at the app root so an editor opening
+  // app/**/page.tsx finds it — editors resolve a file against the nearest tsconfig ABOVE it, and a
+  // config that only lives in client/ is never consulted, leaving every page with an unresolvable
+  // "@server/client" and implicit `any` on every callback parameter.
   //
-  // This lives at the app root so it is the one an editor finds first, and it is the single source
-  // of compiler options; client/tsconfig.json extends it.
+  // One project covers both app/ and client/src so the pages and the generated client are checked
+  // against each other. No typeRoots: client/node_modules is symlinked at this root, so ordinary
+  // module resolution finds the ambient types, and pinning typeRoots would only narrow what it can
+  // see.
   "compilerOptions": {
     "target": "ES2020",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -17,12 +19,16 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    // Resolved relative to THIS file. The bundler resolves the same alias out of
-    // client/node_modules at build time; this is only for the type-checker and the editor.
+    // The bundler resolves this alias out of client/node_modules at build time; this entry is for
+    // the type-checker and the editor.
     "paths": {
       "@server/client": ["./client/src/index.ts"]
-    },
-    "typeRoots": ["./client/node_modules/@types"]
+    }
   },
-  "include": ["app/**/*.tsx", "app/**/*.ts", "client/src"]
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "client/src/**/*.ts",
+    "client/orval.config.ts"
+  ]
 }
