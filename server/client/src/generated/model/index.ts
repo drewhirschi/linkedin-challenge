@@ -23,6 +23,7 @@ export * from './inviteRow';
 export * from './joinRequest';
 export * from './joinResponse';
 export * from './leaderboard';
+export * from './leaderboardAggregate';
 export * from './leaderboardCompetition';
 export * from './linkRequest';
 export * from './linkResponse';

@@ -112,11 +112,13 @@ export interface JoinResponse {
     /** Shown once, on the confirmation screen — paste it into the extension to start syncing. */
     syncToken: string;
 }
+export type LeaderboardAggregate = null | Aggregate;
 export type LeaderboardCompetition = null | CompetitionInfo;
 /**
  * The public leaderboard payload: standings, the competition, and the rules behind the numbers.
  */
 export interface Leaderboard {
+    aggregate?: LeaderboardAggregate;
     competition?: LeaderboardCompetition;
     org: OrgSummary;
     standings: StandingRow[];
@@ -588,6 +590,27 @@ export type getCompetitionLeaderboardResponseError = (getCompetitionLeaderboardR
 export type getCompetitionLeaderboardResponse = (getCompetitionLeaderboardResponseSuccess | getCompetitionLeaderboardResponseError);
 export declare const getGetCompetitionLeaderboardUrl: (slug: string, cid: number) => string;
 export declare const getCompetitionLeaderboard: (slug: string, cid: number, options?: RequestInit) => Promise<getCompetitionLeaderboardResponse>;
+export type getCompetitionAggregateResponse200 = {
+    data: Aggregate;
+    status: 200;
+};
+export type getCompetitionAggregateResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type getCompetitionAggregateResponse404 = {
+    data: ApiError;
+    status: 404;
+};
+export type getCompetitionAggregateResponseSuccess = (getCompetitionAggregateResponse200) & {
+    headers: Headers;
+};
+export type getCompetitionAggregateResponseError = (getCompetitionAggregateResponse401 | getCompetitionAggregateResponse404) & {
+    headers: Headers;
+};
+export type getCompetitionAggregateResponse = (getCompetitionAggregateResponseSuccess | getCompetitionAggregateResponseError);
+export declare const getGetCompetitionAggregateUrl: (slug: string, cid: number) => string;
+export declare const getCompetitionAggregate: (slug: string, cid: number, options?: RequestInit) => Promise<getCompetitionAggregateResponse>;
 export type getMemberDetailResponse200 = {
     data: MemberDetail;
     status: 200;

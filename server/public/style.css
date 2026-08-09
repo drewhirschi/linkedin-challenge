@@ -150,3 +150,25 @@ ul.plain li:last-child { border-bottom: none; }
 .spinner { color: var(--muted); padding: 24px 0; }
 .rules dt { font-weight: 600; margin-top: 10px; }
 .rules dd { margin: 2px 0 0; color: var(--muted); }
+
+/* --- modal ---------------------------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(16, 24, 40, .45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 16px; overflow-y: auto; z-index: 50;
+}
+.modal {
+  background: var(--panel); border-radius: 10px; box-shadow: var(--shadow);
+  width: 100%; max-width: 560px; padding: 20px 22px;
+}
+.modal h3 { margin-top: 0; }
+.modal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.modal-close {
+  background: none; border: 0; font-size: 22px; line-height: 1; cursor: pointer;
+  color: var(--muted); padding: 0 4px; width: auto;
+}
+.admin-strip {
+  border: 1px solid var(--line); border-left: 3px solid var(--brand);
+  border-radius: 8px; padding: 12px 14px; margin: 16px 0; background: var(--panel);
+}
+.admin-strip .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }

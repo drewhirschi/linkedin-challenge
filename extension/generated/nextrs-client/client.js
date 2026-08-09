@@ -183,6 +183,18 @@ export const getCompetitionLeaderboard = async (slug, cid, options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
+export const getGetCompetitionAggregateUrl = (slug, cid) => {
+    return `/api/orgs/${slug}/competitions/${cid}/aggregate`;
+};
+export const getCompetitionAggregate = async (slug, cid, options) => {
+    const res = await fetch(getGetCompetitionAggregateUrl(slug, cid), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
 export const getGetMemberDetailUrl = (slug, cid, id) => {
     return `/api/orgs/${slug}/competitions/${cid}/members/${id}`;
 };

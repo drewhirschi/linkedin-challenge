@@ -82,13 +82,15 @@ pub async fn post(
     .exec(&mut db)
     .await?;
 
-    // Enter everyone already in the org. Joining is explicit in the data model but implicit in the
-    // product: you're in your org's challenges unless an admin removes you. Admins are excluded —
-    // they run the thing, and an empty admin row on the board is noise.
+    // Enter everyone already in the org, admins included. Running a challenge and competing in it
+    // are not exclusive — in a small org the admin is usually a participant too, and excluding them
+    // meant the person who created a competition could not see it on their own home page. There is
+    // no downside: scoring skips any member with no collected data, so nobody appears on a board
+    // until they have actually posted.
     let members = Member::filter(Member::fields().org_id().eq(admin.org_id))
         .exec(&mut db)
         .await?;
-    for m in members.iter().filter(|m| !m.is_admin) {
+    for m in &members {
         enter_competition(&mut db, comp.id, m.id).await?;
     }
 

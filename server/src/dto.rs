@@ -112,6 +112,9 @@ pub struct Leaderboard {
     pub org: OrgSummary,
     pub competition: Option<CompetitionInfo>,
     pub standings: Vec<StandingRow>,
+    /// Always None here — see `aggregate_for`, which an admin-only endpoint serves separately so
+    /// the board itself stays the same for every reader.
+    pub aggregate: Option<Aggregate>,
 }
 
 // --- member detail ---------------------------------------------------------------------------
@@ -345,6 +348,7 @@ pub async fn leaderboard(db: &mut Db, slug: &str) -> ApiResult<Leaderboard> {
         },
         competition: comp.as_ref().map(CompetitionInfo::new),
         standings,
+        aggregate: None,
     })
 }
 
@@ -370,7 +374,75 @@ pub async fn org_detail(db: &mut Db, slug: &str) -> ApiResult<OrgDetail> {
     })
 }
 
+/// Standings plus totals for one competition — the admin view of a board.
+pub async fn competition_aggregate(
+    db: &mut Db,
+    headers: &http::HeaderMap,
+    slug: &str,
+    competition_id: i64,
+) -> ApiResult<Aggregate> {
+    let admin = require_org_admin(db, headers, slug).await?;
+    let comp = Competition::filter_by_id(competition_id)
+        .first()
+        .exec(&mut *db)
+        .await?
+        .filter(|c| c.org_id == admin.org_id)
+        .ok_or_else(|| ApiError::not_found("competition not found"))?;
+    let standings = rank(compute_standings(db, &comp).await?);
+    aggregate_for(db, &comp, &standings).await
+}
+
+/// Totals across one competition's entrants.
+pub async fn aggregate_for(
+    db: &mut Db,
+    comp: &Competition,
+    standings: &[StandingRow],
+) -> ApiResult<Aggregate> {
+    let entrants = entrant_ids(db, comp.id).await?;
+
+    let mut totals = (0i64, 0i64, 0i64, 0i64);
+    let mut total_posts = 0usize;
+    for member_id in &entrants {
+        let posts = Post::filter(Post::fields().member_id().eq(*member_id))
+            .exec(&mut *db)
+            .await?;
+        for post in &posts {
+            let (stat, posted_at) = post_stats(db, post).await?;
+            if posted_at >= comp.start_at && posted_at <= comp.end_at {
+                total_posts += 1;
+                totals.0 += stat.impressions;
+                totals.1 += stat.reactions;
+                totals.2 += stat.comments_by_others;
+                totals.3 += stat.reposts;
+            }
+        }
+    }
+
+    let invites = Invite::filter(Invite::fields().org_id().eq(comp.org_id))
+        .exec(&mut *db)
+        .await?;
+
+    Ok(Aggregate {
+        participants: entrants.len(),
+        scoring_participants: standings.len(),
+        total_posts,
+        graded_posts: standings.iter().map(|s| s.graded_posts).sum(),
+        total_impressions: totals.0,
+        total_reactions: totals.1,
+        total_comments: totals.2,
+        total_reposts: totals.3,
+        total_followers: standings.iter().map(|s| s.follower_count).sum(),
+        total_points: standings.iter().map(|s| s.total).sum(),
+        invites_open: invites.iter().filter(|i| !i.redeemed).count(),
+        invites_redeemed: invites.iter().filter(|i| i.redeemed).count(),
+    })
+}
+
 /// The leaderboard for one specific competition.
+///
+/// Deliberately takes no session: the board is the same for everyone, so it stays seedable into the
+/// streamed HTML and cacheable. An admin's extra numbers come from `aggregate_for` via its own
+/// endpoint rather than being folded in here, which would make every board per-viewer.
 pub async fn competition_leaderboard(
     db: &mut Db,
     slug: &str,
@@ -395,6 +467,7 @@ pub async fn competition_leaderboard(
         },
         competition: Some(CompetitionInfo::new(&comp)),
         standings,
+        aggregate: None,
     })
 }
 

@@ -581,6 +581,65 @@
         }
       }
     },
+    "/api/orgs/{slug}/competitions/{cid}/aggregate": {
+      "get": {
+        "tags": [
+          "aggregate"
+        ],
+        "operationId": "getCompetitionAggregate",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Totals across this competition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Aggregate"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in as an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such organization or competition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orgs/{slug}/competitions/{cid}/members/{id}": {
       "get": {
         "tags": [
@@ -1038,6 +1097,17 @@
           "standings"
         ],
         "properties": {
+          "aggregate": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Aggregate",
+                "description": "Always None here — see `aggregate_for`, which an admin-only endpoint serves separately so\nthe board itself stays the same for every reader."
+              }
+            ]
+          },
           "competition": {
             "oneOf": [
               {

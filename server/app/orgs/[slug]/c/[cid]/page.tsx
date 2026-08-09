@@ -2,6 +2,8 @@
 // scoring rules in force — so participants can see how points are earned rather than guess.
 import {
   useGetCompetitionLeaderboard,
+  useGetCompetitionAggregate,
+  useGetMe,
   fmtInt,
   fmtNum,
   fmtRate,
@@ -9,6 +11,43 @@ import {
   initials,
 } from "@server/client";
 import type { ScoringConfig } from "@server/client";
+
+// The extra numbers an organiser wants while looking at a board — shown inline rather than on a
+// separate admin screen, because "how is this competition doing" is the same question the board
+// answers, just wider.
+function AdminStrip({ slug, cid, enabled }: { slug: string; cid: number; enabled: boolean }) {
+  const { data } = useGetCompetitionAggregate(slug, cid, { query: { enabled } });
+  if (!enabled || data?.status !== 200) return null;
+  const a = data.data;
+
+  const cells: [string, string][] = [
+    ["Entrants", fmtInt(a.participants)],
+    ["Scoring", fmtInt(a.scoringParticipants)],
+    ["Posts in window", fmtInt(a.totalPosts)],
+    ["Posts graded", fmtInt(a.gradedPosts)],
+    ["Impressions", fmtInt(a.totalImpressions)],
+    ["Reactions", fmtInt(a.totalReactions)],
+    ["Comments", fmtInt(a.totalComments)],
+    ["Reposts", fmtInt(a.totalReposts)],
+    ["Combined followers", fmtInt(a.totalFollowers)],
+    ["Points awarded", fmtNum(a.totalPoints)],
+    ["Invites", `${a.invitesRedeemed} used / ${a.invitesOpen} open`],
+  ];
+
+  return (
+    <div className="admin-strip">
+      <div className="k" style={{ marginBottom: 8 }}>Organiser view</div>
+      <div className="metrics">
+        {cells.map(([k, v]) => (
+          <div className="metric" key={k}>
+            <span className="n">{v}</span>
+            <span className="k">{k}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -68,6 +107,9 @@ export default function CompetitionLeaderboard({
   const { slug } = params;
   const cid = Number(params.cid);
   const { data, isLoading } = useGetCompetitionLeaderboard(slug, cid);
+  const { data: meData } = useGetMe();
+  const me = meData?.status === 200 ? meData.data : undefined;
+  const canManage = Boolean(me?.isAdmin && me?.orgSlug === slug);
 
   if (isLoading) return <div className="spinner">Loading leaderboard…</div>;
   if (data?.status !== 200 || !data.data.competition) {
@@ -93,6 +135,8 @@ export default function CompetitionLeaderboard({
           </>
         )}
       </p>
+
+      <AdminStrip slug={slug} cid={cid} enabled={canManage} />
 
       <div className="grid cols-3">
         <Stat label="Participants" value={fmtInt(standings.length)} />

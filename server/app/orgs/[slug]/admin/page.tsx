@@ -5,10 +5,7 @@ import {
   useCreateCompetition,
   useCreateInvites,
   getGetAdminOverviewQueryKey,
-  fmtInt,
-  fmtNum,
   fmtDate,
-  initials,
 } from "@server/client";
 import type { ScoringConfig } from "@server/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,15 +15,6 @@ function isoDate(offsetDays = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
   return d.toISOString().slice(0, 10);
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat">
-      <div className="k">{label}</div>
-      <div className="v">{value}</div>
-    </div>
-  );
 }
 
 function NumberField({
@@ -53,7 +41,19 @@ function NumberField({
   );
 }
 
-function NewCompetition({ slug, defaults, onCreated }: { slug: string; defaults: ScoringConfig; onCreated: () => void }) {
+function NewCompetition({
+  slug,
+  defaults,
+  open,
+  onClose,
+  onCreated,
+}: {
+  slug: string;
+  defaults: ScoringConfig;
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
   const [name, setName] = useState("");
   const [start, setStart] = useState(isoDate());
   const [end, setEnd] = useState(isoDate(90));
@@ -63,9 +63,23 @@ function NewCompetition({ slug, defaults, onCreated }: { slug: string; defaults:
 
   const set = (patch: Partial<ScoringConfig>) => setCfg({ ...cfg, ...patch });
 
+  if (!open) return null;
+
   return (
-    <div className="panel">
-      <h3>New competition</h3>
+    <div
+      className="modal-backdrop"
+      onClick={(e) => {
+        // Backdrop only — a click that started inside the dialog shouldn't discard a filled form.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="modal" role="dialog" aria-modal="true" aria-label="New competition">
+      <div className="modal-head">
+        <h3>New competition</h3>
+        <button className="modal-close" type="button" onClick={onClose} aria-label="Close">
+          &times;
+        </button>
+      </div>
       {error && <div className="notice err">{error}</div>}
       <form
         onSubmit={(e) => {
@@ -78,6 +92,7 @@ function NewCompetition({ slug, defaults, onCreated }: { slug: string; defaults:
                 if (res.status === 200) {
                   setName("");
                   onCreated();
+                  onClose();
                 } else {
                   setError(res.data?.error ?? "Could not create the competition.");
                 }
@@ -197,12 +212,16 @@ function NewCompetition({ slug, defaults, onCreated }: { slug: string; defaults:
           />
         </div>
 
-        <p style={{ marginTop: 16 }}>
+        <p style={{ marginTop: 16, display: "flex", gap: 8 }}>
           <button type="submit" disabled={create.isPending}>
             {create.isPending ? "Creating…" : "Create competition"}
           </button>
+          <button type="button" className="btn ghost" onClick={onClose}>
+            Cancel
+          </button>
         </p>
       </form>
+      </div>
     </div>
   );
 }
@@ -252,11 +271,12 @@ export default function AdminDashboard({ params }: { params: { slug: string } })
   const { slug } = params;
   const queryClient = useQueryClient();
   const { data, isLoading } = useGetAdminOverview(slug);
+  const [creating, setCreating] = useState(false);
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey(slug) });
 
-  if (isLoading) return <div className="spinner">Loading dashboard…</div>;
+  if (isLoading) return <div className="spinner">Loading…</div>;
   if (data?.status !== 200) {
     return (
       <div className="empty">
@@ -265,93 +285,29 @@ export default function AdminDashboard({ params }: { params: { slug: string } })
     );
   }
 
-  const { org, competitions, current, standings, invites, aggregate, defaults } = data.data;
+  const { org, competitions, invites, defaults } = data.data;
+  const now = Math.floor(Date.now() / 1000);
 
   return (
     <>
-      <h1>Dashboard</h1>
+      <p className="small muted">
+        <a href={`/orgs/${slug}`}>← {org.name}</a>
+      </p>
+      <h1>Manage {org.name}</h1>
       <p className="lede">
-        {org.name} · public leaderboard: <a href={`/orgs/${org.slug}`}>/orgs/{org.slug}</a>
+        Set up competitions and invite people. A competition&rsquo;s own page carries its
+        leaderboard and progress.
       </p>
 
-      <h2>Progress</h2>
-      {!current ? (
-        <div className="empty">No competition running. Create one below to start scoring.</div>
+      <div className="week-head">
+        <h2 style={{ margin: 0 }}>Competitions</h2>
+        <button onClick={() => setCreating(true)}>New competition</button>
+      </div>
+
+      {competitions.length === 0 ? (
+        <div className="empty">No competitions yet. Create one to start scoring.</div>
       ) : (
-        <>
-          <p className="small muted">
-            {current.name} · {fmtDate(current.startAt)} → {fmtDate(current.endAt)}
-          </p>
-          <div className="grid cols-4">
-            <Stat label="Participants" value={fmtInt(aggregate.participants)} />
-            <Stat label="Scoring" value={fmtInt(aggregate.scoringParticipants)} />
-            <Stat label="Posts in window" value={fmtInt(aggregate.totalPosts)} />
-            <Stat label="Posts graded" value={fmtInt(aggregate.gradedPosts)} />
-          </div>
-          <div className="grid cols-4" style={{ marginTop: 12 }}>
-            <Stat label="Impressions" value={fmtInt(aggregate.totalImpressions)} />
-            <Stat label="Reactions" value={fmtInt(aggregate.totalReactions)} />
-            <Stat label="Comments" value={fmtInt(aggregate.totalComments)} />
-            <Stat label="Reposts" value={fmtInt(aggregate.totalReposts)} />
-          </div>
-          <div className="grid cols-3" style={{ marginTop: 12 }}>
-            <Stat label="Combined followers" value={fmtInt(aggregate.totalFollowers)} />
-            <Stat label="Total points awarded" value={fmtNum(aggregate.totalPoints)} />
-            <Stat
-              label="Invites"
-              value={`${aggregate.invitesRedeemed} used / ${aggregate.invitesOpen} open`}
-            />
-          </div>
-
-          <h2>Standings</h2>
-          <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-            {standings.length === 0 ? (
-              <div className="empty">Nobody has synced data yet.</div>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Participant</th>
-                    <th className="num">Followers</th>
-                    <th className="num">Posts</th>
-                    <th className="num">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {standings.map((row) => (
-                    <tr key={row.memberId}>
-                      <td className={`rank r${row.rank}`}>{row.rank}</td>
-                      <td>
-                        <a className="who" href={`/orgs/${org.slug}/members/${row.memberId}`}>
-                          <span className="avatar">{initials(row.displayName)}</span>
-                          <span>{row.displayName}</span>
-                        </a>
-                      </td>
-                      <td className="num">{fmtInt(row.followerCount)}</td>
-                      <td className="num">
-                        {row.gradedPosts}
-                        {row.totalPosts > row.gradedPosts && (
-                          <span className="muted small"> / {row.totalPosts}</span>
-                        )}
-                      </td>
-                      <td className="num">
-                        <strong>{fmtNum(row.total)}</strong>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
-      )}
-
-      <h2>Competitions</h2>
-      <div className="panel">
-        {competitions.length === 0 ? (
-          <div className="empty">No competitions yet. Create one below.</div>
-        ) : (
+        <div className="panel">
           <table>
             <thead>
               <tr>
@@ -363,29 +319,38 @@ export default function AdminDashboard({ params }: { params: { slug: string } })
             <tbody>
               {competitions.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
+                  <td>
+                    {/* The row is the way in — the details live on the competition's own page. */}
+                    <a href={`/orgs/${slug}/c/${c.id}`}>{c.name}</a>
+                  </td>
                   <td className="small muted">
                     {fmtDate(c.startAt)} → {fmtDate(c.endAt)}
                   </td>
                   <td>
-                    <span className={`badge ${c.isActive ? "ok" : "muted"}`}>
-                      {c.isActive ? "Active" : "Inactive"}
+                    <span className={`badge ${c.isActive && c.endAt >= now ? "ok" : "muted"}`}>
+                      {c.isActive && c.endAt >= now ? "Running" : "Finished"}
                     </span>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
 
-      <NewCompetition slug={slug} defaults={defaults} onCreated={refresh} />
+      <NewCompetition
+        slug={slug}
+        defaults={defaults}
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={refresh}
+      />
 
       <h2>Invites</h2>
       <div className="panel">
         <p className="small muted">
-          Share a code with a teammate. They install the Challenge Sync extension, open it, and
-          paste the code to join.
+          Share a code with a teammate. They redeem it on the join page, then sign into the
+          Challenge Sync extension with the same account.
         </p>
         {invites.length === 0 ? (
           <div className="empty">No invites yet.</div>

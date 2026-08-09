@@ -4,6 +4,7 @@
  * linkedin-challenge-server
  * OpenAPI spec version: 0.1.0
  */
+import type { LeaderboardAggregate } from './leaderboardAggregate';
 import type { LeaderboardCompetition } from './leaderboardCompetition';
 import type { OrgSummary } from './orgSummary';
 import type { StandingRow } from './standingRow';
@@ -12,6 +13,7 @@ import type { StandingRow } from './standingRow';
  * The public leaderboard payload: standings, the competition, and the rules behind the numbers.
  */
 export interface Leaderboard {
+  aggregate?: LeaderboardAggregate;
   competition?: LeaderboardCompetition;
   org: OrgSummary;
   standings: StandingRow[];

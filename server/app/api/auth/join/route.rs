@@ -102,14 +102,13 @@ pub async fn post(
 
     // Enter the org's live competitions, so a new joiner appears on the board without an admin
     // having to do anything. Finished ones are left alone — you can't retroactively compete.
-    if !member.is_admin {
-        let comps = Competition::filter(Competition::fields().org_id().eq(org.id))
-            .exec(&mut db)
-            .await?;
-        let now = now_unix();
-        for c in comps.iter().filter(|c| c.is_active && c.end_at >= now) {
-            enter_competition(&mut db, c.id, member.id).await?;
-        }
+    // Admins are entered too: they typically compete as well as organise.
+    let comps = Competition::filter(Competition::fields().org_id().eq(org.id))
+        .exec(&mut db)
+        .await?;
+    let now = now_unix();
+    for c in comps.iter().filter(|c| c.is_active && c.end_at >= now) {
+        enter_competition(&mut db, c.id, member.id).await?;
     }
 
     let cookie = establish_session(&mut db, member.id).await?;
