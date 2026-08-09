@@ -1,0 +1,26 @@
+{
+  "name": "@server/client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "ln -sfn client/node_modules ../node_modules",
+    "dump": "NEXTRS_SKIP_BUNDLE=1 cargo run --bin dump-openapi",
+    "orval": "orval --config ./orval.config.ts",
+    "gen": "npm run dump && npm run orval",
+    "generate:external": "node ./scripts/generate-external.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "@tanstack/react-router": "^1.87.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "orval": "^7.3.0",
+    "typescript": "^5.7.0"
+  }
+}

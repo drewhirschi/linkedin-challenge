@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>Challenge Sync</title>
+  </head>
+  <body>
+    <header>
+      <div class="logo">in</div>
+      <div>
+        <h1>Challenge Sync</h1>
+        <p class="tag">Your stats, synced privately.</p>
+      </div>
+    </header>
+
+    <!-- Unlinked: reuse the website session, or send the user there to sign in -->
+    <section id="link-view" hidden>
+      <p class="lede">
+        Connect this browser to your challenge account. If you're already signed in on the site,
+        this takes one click.
+      </p>
+      <button id="link-btn" class="primary">Connect</button>
+      <p class="note">
+        Not signed in? We'll open the sign-in page for you — come back and press Connect again.
+      </p>
+      <p class="note">
+        This reads only your own LinkedIn stats (followers, your posts, your post analytics) from
+        the session already open in this browser. It never sees your LinkedIn password and never
+        posts on your behalf.
+      </p>
+    </section>
+
+    <!-- Linked: status dashboard -->
+    <section id="status-view" hidden>
+      <div class="row">
+        <span class="k">Signed in as</span>
+        <span class="v" id="display-name">—</span>
+      </div>
+      <div class="row">
+        <span class="k">Organization</span>
+        <span class="v" id="org-name">—</span>
+      </div>
+      <div class="row">
+        <span class="k">Last successful sync</span>
+        <span class="v" id="last-sync">Never</span>
+      </div>
+      <div class="row">
+        <span class="k">Next sync</span>
+        <span class="v" id="next-sync">—</span>
+      </div>
+      <div class="row">
+        <span class="k">Posts synced</span>
+        <span class="v" id="posts-count">0</span>
+      </div>
+      <p id="error-line" class="error" hidden></p>
+      <button id="sync-btn" class="primary">Sync now</button>
+      <p class="note">Syncs run twice a day. LinkedIn is read from your own session, so we keep it light.</p>
+      <button id="unlink-btn" class="ghost">Unlink this device</button>
+    </section>
+
+    <p id="toast" class="toast" hidden></p>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

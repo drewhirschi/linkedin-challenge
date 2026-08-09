@@ -1,0 +1,1563 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "linkedin-challenge-server",
+    "description": "",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/admin/competitions": {
+      "post": {
+        "tags": [
+          "competitions"
+        ],
+        "operationId": "createCompetition",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCompetitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Competition created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateCompetitionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in as an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/invites": {
+      "post": {
+        "tags": [
+          "invites"
+        ],
+        "operationId": "createInvites",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvitesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Codes generated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateInvitesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in as an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/overview": {
+      "get": {
+        "tags": [
+          "overview"
+        ],
+        "operationId": "getAdminOverview",
+        "responses": {
+          "200": {
+            "description": "Org-wide admin view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminOverview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in as an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/device/session": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "operationId": "signInDeviceWithSession",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionDeviceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Sync token issued for this device",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionDeviceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid website session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/join": {
+      "post": {
+        "tags": [
+          "join"
+        ],
+        "operationId": "joinWithInvite",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JoinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Account created and signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Password too short",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invite code not found or already used",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "login"
+        ],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in; session cookie set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Wrong email or password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "logout"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "Signed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "getMe",
+        "responses": {
+          "200": {
+            "description": "Current session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/signup": {
+      "post": {
+        "tags": [
+          "signup"
+        ],
+        "operationId": "signup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Organization created; session cookie set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Password too short",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Email already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/link": {
+      "post": {
+        "tags": [
+          "link"
+        ],
+        "operationId": "linkIdentity",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "LinkedIn identity bound to this account",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing sync token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That LinkedIn account is linked to someone else",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orgs": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "operationId": "listOrgs",
+        "responses": {
+          "200": {
+            "description": "Organizations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrgSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orgs/{slug}": {
+      "get": {
+        "tags": [
+          "orgs"
+        ],
+        "operationId": "getLeaderboard",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Standings and competition rules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Leaderboard"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orgs/{slug}/members/{id}": {
+      "get": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "getMemberDetail",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The member's standing and posts by week",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such organization or member",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sync": {
+      "post": {
+        "tags": [
+          "sync"
+        ],
+        "operationId": "pushSync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Snapshot batch ingested",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing sync token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AdminOverview": {
+        "type": "object",
+        "required": [
+          "org",
+          "adminName",
+          "competitions",
+          "standings",
+          "invites",
+          "aggregate",
+          "defaults"
+        ],
+        "properties": {
+          "adminName": {
+            "type": "string"
+          },
+          "aggregate": {
+            "$ref": "#/components/schemas/Aggregate"
+          },
+          "competitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompetitionInfo"
+            }
+          },
+          "current": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionInfo"
+              }
+            ]
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/ScoringConfig",
+            "description": "Sensible defaults for the \"new competition\" form."
+          },
+          "invites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InviteRow"
+            }
+          },
+          "org": {
+            "$ref": "#/components/schemas/OrgSummary"
+          },
+          "standings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StandingRow"
+            }
+          }
+        }
+      },
+      "Aggregate": {
+        "type": "object",
+        "description": "Org-wide totals — the aggregate view, which the ranked list alone doesn't give you.",
+        "required": [
+          "participants",
+          "scoringParticipants",
+          "totalPosts",
+          "gradedPosts",
+          "totalImpressions",
+          "totalReactions",
+          "totalComments",
+          "totalReposts",
+          "totalFollowers",
+          "totalPoints",
+          "invitesOpen",
+          "invitesRedeemed"
+        ],
+        "properties": {
+          "gradedPosts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "invitesOpen": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "invitesRedeemed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "participants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "scoringParticipants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalComments": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalFollowers": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalImpressions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPoints": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalPosts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "totalReactions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalReposts": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ApiError": {
+        "type": "object",
+        "description": "A JSON error body. Every API route returns this shape on failure, so the generated client\nand the extension can rely on `{ \"error\": \"...\" }` regardless of status.",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "CompetitionInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "startAt",
+          "endAt",
+          "isActive",
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/ScoringConfig",
+            "description": "The scoring rules in force — this is what the \"how the challenge is configured\" screen reads."
+          },
+          "endAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "startAt": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CreateCompetitionRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "start",
+          "end",
+          "config"
+        ],
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/ScoringConfig"
+          },
+          "end": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`, inclusive through end of day."
+          },
+          "name": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`."
+          }
+        }
+      },
+      "CreateCompetitionResponse": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "CreateInvitesRequest": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`\"participant\"` (default) or `\"admin\"`."
+          }
+        }
+      },
+      "CreateInvitesResponse": {
+        "type": "object",
+        "required": [
+          "codes"
+        ],
+        "properties": {
+          "codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "InviteRow": {
+        "type": "object",
+        "required": [
+          "code",
+          "role",
+          "redeemed",
+          "createdAt"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "redeemed": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "JoinRequest": {
+        "type": "object",
+        "required": [
+          "inviteCode",
+          "name",
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "inviteCode": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "JoinResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "orgSlug",
+          "orgName",
+          "memberId",
+          "syncToken",
+          "isAdmin"
+        ],
+        "properties": {
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "orgName": {
+            "type": "string"
+          },
+          "orgSlug": {
+            "type": "string"
+          },
+          "syncToken": {
+            "type": "string",
+            "description": "Shown once, on the confirmation screen — paste it into the extension to start syncing."
+          }
+        }
+      },
+      "Leaderboard": {
+        "type": "object",
+        "description": "The public leaderboard payload: standings, the competition, and the rules behind the numbers.",
+        "required": [
+          "org",
+          "standings"
+        ],
+        "properties": {
+          "competition": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionInfo"
+              }
+            ]
+          },
+          "org": {
+            "$ref": "#/components/schemas/OrgSummary"
+          },
+          "standings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StandingRow"
+            }
+          }
+        }
+      },
+      "LinkRequest": {
+        "type": "object",
+        "required": [
+          "member"
+        ],
+        "properties": {
+          "member": {
+            "$ref": "#/components/schemas/MemberInfo"
+          }
+        }
+      },
+      "LinkResponse": {
+        "type": "object",
+        "required": [
+          "orgName",
+          "displayName",
+          "memberId",
+          "orgSlug"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "orgName": {
+            "type": "string"
+          },
+          "orgSlug": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MeResponse": {
+        "type": "object",
+        "required": [
+          "signedIn",
+          "isAdmin"
+        ],
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isAdmin": {
+            "type": "boolean",
+            "description": "Whether this member administers their org — the dashboard is the only thing it unlocks."
+          },
+          "memberId": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "orgSlug": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "signedIn": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MemberDetail": {
+        "type": "object",
+        "required": [
+          "org",
+          "memberId",
+          "displayName",
+          "weeks",
+          "outsideWindow"
+        ],
+        "properties": {
+          "competition": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompetitionInfo"
+              }
+            ]
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "org": {
+            "$ref": "#/components/schemas/OrgSummary"
+          },
+          "outsideWindow": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostStat"
+            },
+            "description": "Posts we hold that fall outside the competition window."
+          },
+          "profileUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "standing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StandingRow",
+                "description": "This member's row in the standings, when they have collected data."
+              }
+            ]
+          },
+          "weeks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeekGroup"
+            }
+          }
+        }
+      },
+      "MemberInfo": {
+        "type": "object",
+        "required": [
+          "memberUrn"
+        ],
+        "properties": {
+          "firstName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memberUrn": {
+            "type": "string"
+          },
+          "profileUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicIdentifier": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Metrics": {
+        "type": "object",
+        "properties": {
+          "comments": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "impressions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "reactions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "reposts": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "OrgSummary": {
+        "type": "object",
+        "required": [
+          "slug",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "PostPayload": {
+        "type": "object",
+        "required": [
+          "urn",
+          "permalink",
+          "metrics"
+        ],
+        "properties": {
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/Metrics"
+          },
+          "permalink": {
+            "type": "string"
+          },
+          "textPreview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "urn": {
+            "type": "string"
+          }
+        }
+      },
+      "PostStat": {
+        "type": "object",
+        "required": [
+          "id",
+          "urn",
+          "permalink",
+          "postedAt",
+          "impressions",
+          "reactions",
+          "comments",
+          "reposts",
+          "inWindow"
+        ],
+        "properties": {
+          "comments": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "impressions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "inWindow": {
+            "type": "boolean",
+            "description": "False when the post falls outside the competition window."
+          },
+          "permalink": {
+            "type": "string"
+          },
+          "postedAt": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Post creation time, or the first snapshot's time when LinkedIn didn't give us one."
+          },
+          "reactions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reposts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "textPreview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "urn": {
+            "type": "string"
+          }
+        }
+      },
+      "ProfilePayload": {
+        "type": "object",
+        "properties": {
+          "followerCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "profileViews": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          }
+        }
+      },
+      "ScoringConfig": {
+        "type": "object",
+        "description": "Per-competition scoring parameters, stored as JSON on the `Competition` row.",
+        "required": [
+          "maxPostsPerWeek",
+          "perReaction",
+          "perComment",
+          "perRepost",
+          "perImpression",
+          "perFollowerGained",
+          "perProfileView",
+          "normalizeByFollowers",
+          "followerBaseline"
+        ],
+        "properties": {
+          "followerBaseline": {
+            "type": "integer",
+            "format": "int64",
+            "default": 1000
+          },
+          "maxPostsPerWeek": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Posts beyond this many per week don't score (only the highest-scoring ones count).",
+            "default": 3,
+            "minimum": 0
+          },
+          "normalizeByFollowers": {
+            "type": "boolean",
+            "description": "If true, post points are scaled by `follower_baseline / follower_count`.",
+            "default": true
+          },
+          "perComment": {
+            "type": "number",
+            "format": "double",
+            "default": 3.0
+          },
+          "perFollowerGained": {
+            "type": "number",
+            "format": "double",
+            "default": 10.0
+          },
+          "perImpression": {
+            "type": "number",
+            "format": "double",
+            "default": 0.01
+          },
+          "perProfileView": {
+            "type": "number",
+            "format": "double",
+            "default": 0.5
+          },
+          "perReaction": {
+            "type": "number",
+            "format": "double",
+            "default": 1.0
+          },
+          "perRepost": {
+            "type": "number",
+            "format": "double",
+            "default": 5.0
+          }
+        }
+      },
+      "SessionDeviceRequest": {
+        "type": "object",
+        "required": [
+          "sessionToken"
+        ],
+        "properties": {
+          "sessionToken": {
+            "type": "string",
+            "description": "Value of the `session` cookie for this server."
+          }
+        }
+      },
+      "SessionDeviceResponse": {
+        "type": "object",
+        "required": [
+          "syncToken",
+          "displayName",
+          "orgName",
+          "orgSlug",
+          "memberId",
+          "linked"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "linked": {
+            "type": "boolean",
+            "description": "True once a LinkedIn identity is bound; false means this is a first link."
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "orgName": {
+            "type": "string"
+          },
+          "orgSlug": {
+            "type": "string"
+          },
+          "syncToken": {
+            "type": "string"
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "displayName",
+          "orgSlug"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "orgSlug": {
+            "type": "string"
+          }
+        }
+      },
+      "SignupRequest": {
+        "type": "object",
+        "required": [
+          "orgName",
+          "name",
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "orgName": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "SignupResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "orgSlug"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "orgSlug": {
+            "type": "string"
+          }
+        }
+      },
+      "StandingRow": {
+        "type": "object",
+        "required": [
+          "rank",
+          "memberId",
+          "displayName",
+          "followerCount",
+          "postPoints",
+          "profilePoints",
+          "total",
+          "gradedPosts",
+          "totalPosts"
+        ],
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "followerCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "gradedPosts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "memberId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "postPoints": {
+            "type": "number",
+            "format": "double"
+          },
+          "profilePoints": {
+            "type": "number",
+            "format": "double"
+          },
+          "profileUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalPosts": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "SyncRequest": {
+        "type": "object",
+        "required": [
+          "profile",
+          "posts"
+        ],
+        "properties": {
+          "capturedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "posts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostPayload"
+            }
+          },
+          "profile": {
+            "$ref": "#/components/schemas/ProfilePayload"
+          }
+        }
+      },
+      "SyncResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "postsIngested",
+          "nextSyncAfterSeconds"
+        ],
+        "properties": {
+          "nextSyncAfterSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "postsIngested": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "WeekGroup": {
+        "type": "object",
+        "description": "Posts bucketed by the same weekly buckets the scoring uses, so the grouping matches how\npoints were actually earned.",
+        "required": [
+          "week",
+          "startAt",
+          "endAt",
+          "posts"
+        ],
+        "properties": {
+          "endAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "posts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostStat"
+            }
+          },
+          "startAt": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "week": {
+            "type": "integer",
+            "format": "int64",
+            "description": "0-based week index from the competition start."
+          }
+        }
+      }
+    }
+  }
+}

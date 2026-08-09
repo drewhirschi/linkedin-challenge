@@ -1,0 +1,15 @@
+target/
+.reference/
+*.db
+*.db-*
+node_modules/
+.DS_Store
+.env
+dist/
+*.zip
+
+# Local database backups taken before destructive schema changes (demo data only).
+.backup/
+
+# Playwright MCP scratch output from browser testing.
+.playwright-mcp/

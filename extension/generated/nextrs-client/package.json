@@ -1,0 +1,9 @@
+{
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./client.d.ts",
+      "import": "./client.js"
+    }
+  }
+}

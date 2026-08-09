@@ -1,0 +1,2 @@
+[alias]
+dev = "nextrs-dev --bin server"

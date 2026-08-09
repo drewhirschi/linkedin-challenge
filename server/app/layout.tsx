@@ -1,0 +1,65 @@
+// Root layout — the chrome that stays mounted across soft navigations. Plain <a> links let
+// TanStack Router swap only the page leaf, so the React Query cache survives navigation.
+import type { ReactNode } from "react";
+import { useGetMe, useLogout } from "@server/client";
+
+function Nav() {
+  // Unseeded on purpose: session state is per-viewer, so seeding it into the streamed HTML would
+  // make the page uncacheable for no gain.
+  const { data } = useGetMe();
+  const me = data?.status === 200 ? data.data : undefined;
+  const logout = useLogout();
+
+  if (!me?.signedIn) {
+    return <a href="/login">Log in</a>;
+  }
+
+  return (
+    <>
+      {me.orgSlug && <a href={`/orgs/${me.orgSlug}`}>Leaderboard</a>}
+      {me.orgSlug && me.memberId != null && (
+        <a href={`/orgs/${me.orgSlug}/members/${me.memberId}`}>My standing</a>
+      )}
+      {/* The dashboard is the only thing the admin role unlocks. */}
+      {me.isAdmin && <a href="/admin">Dashboard</a>}
+      <span className="muted">{me.displayName}</span>
+      <button
+        className="btn ghost sm"
+        type="button"
+        onClick={() =>
+          logout.mutate(undefined, {
+            // Full document load, not a soft nav: the session cookie changed, so every cached
+            // query is now answering as the wrong user.
+            onSuccess: () => {
+              window.location.href = "/login";
+            },
+          })
+        }
+      >
+        Log out
+      </button>
+    </>
+  );
+}
+
+export default function Layout({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <title>Challenge — LinkedIn leaderboard</title>
+      <link rel="stylesheet" href="/style.css" />
+      <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+      <link rel="icon" href="/favicon.ico" sizes="32x32" />
+      <header className="site-header">
+        <nav className="nav">
+          <a href="/" className="brand">
+            <span className="mark">in</span>
+            <span>Challenge</span>
+          </a>
+          <span className="spacer" />
+          <Nav />
+        </nav>
+      </header>
+      <main>{children}</main>
+    </>
+  );
+}
