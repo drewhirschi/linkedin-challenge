@@ -283,39 +283,69 @@ export async function diagnose() {
     out.posts = { error: String(e.message || e) };
   }
 
-  // The old networkinfo endpoint now answers 410 Gone, so probe candidates and report which ones
-  // respond and what numbers they carry. Cheap, and it beats guessing a second time.
-  const me = await getMe().catch(() => null);
-  const pid = me?.publicIdentifier ? encodeURIComponent(me.publicIdentifier) : null;
-  const candidates = [
-    pid && `/identity/profiles/${pid}/networkinfo`,
+  // Follower count has no obvious home any more: `networkinfo` and `profileView` both answer 410,
+  // and the dash profile projection carries no counts at the top level. So rather than probe
+  // endpoint by endpoint, fetch a few that respond and search the WHOLE payload recursively for
+  // numeric keys that look like follower/connection/view counts, reporting where they live.
+  const deepFindNumbers = (node, re, path = "$", depth = 0, found = []) => {
+    if (found.length >= 25 || depth > 6 || !node || typeof node !== "object") return found;
+    for (const [k, v] of Object.entries(node)) {
+      const here = Array.isArray(node) ? `${path}[]` : `${path}.${k}`;
+      if (typeof v === "number" && re.test(k)) found.push({ path: here, key: k, value: v });
+      else if (v && typeof v === "object") deepFindNumbers(v, re, here, depth + 1, found);
+    }
+    return found;
+  };
+  const INTERESTING = /follow|connection|view|impression/i;
+
+  const me2 = await getMe().catch(() => null);
+  const pid = me2?.publicIdentifier ? encodeURIComponent(me2.publicIdentifier) : null;
+  // The dash APIs key off the fsd_profile urn, which the dash profile response contains.
+  let fsdUrn = null;
+
+  const paths = [
     pid && `/identity/dash/profiles?q=memberIdentity&memberIdentity=${pid}`,
-    pid && `/identity/profiles/${pid}/profileView`,
-    `/me`,
-    `/feed/dash/socialActivityCounts`,
+    pid &&
+      `/identity/dash/profiles?q=memberIdentity&memberIdentity=${pid}` +
+        `&decorationId=com.linkedin.voyager.dash.deco.identity.profile.WebTopCardCore-6`,
+    `/identity/wvmpCards?q=findWvmpCards`,
   ].filter(Boolean);
 
-  for (const path of candidates) {
+  for (const path of paths) {
     try {
       const json = await voyagerFetch(path);
-      const numbersIn = (obj) =>
-        Object.entries(obj || {})
-          .filter(([, v]) => typeof v === "number")
-          .map(([k]) => k);
+      fsdUrn =
+        fsdUrn ||
+        included(json).find((e) => String(e?.entityUrn || "").includes("fsd_profile"))?.entityUrn ||
+        null;
       out.followerCandidates.push({
         path,
         status: "ok",
-        dataNumericKeys: numbersIn(json?.data),
-        entities: included(json)
-          .map((e) => ({ type: e?.$type || "(untyped)", numericKeys: numbersIn(e) }))
-          .filter((e) => e.numericKeys.length)
-          .slice(0, 8),
+        entityTypes: [...new Set(included(json).map((e) => e?.$type).filter(Boolean))].slice(0, 10),
+        matches: deepFindNumbers(json, INTERESTING),
       });
     } catch (e) {
       out.followerCandidates.push({ path, status: String(e.message || e) });
     }
     await sleep(REQUEST_DELAY_MS);
   }
+
+  // Follower counts live on a FollowingState in the dash graph; it needs the fsd_profile urn.
+  if (fsdUrn) {
+    const followPath = `/feed/dash/followingStates?ids=List(${encodeURIComponent(fsdUrn)})`;
+    try {
+      const json = await voyagerFetch(followPath);
+      out.followerCandidates.push({
+        path: followPath,
+        status: "ok",
+        entityTypes: [...new Set(included(json).map((e) => e?.$type).filter(Boolean))].slice(0, 10),
+        matches: deepFindNumbers(json, INTERESTING),
+      });
+    } catch (e) {
+      out.followerCandidates.push({ path: followPath, status: String(e.message || e) });
+    }
+  }
+  out.profileUrnFound = Boolean(fsdUrn);
 
   return out;
 }
