@@ -192,6 +192,27 @@ pub struct AdminOverview {
 
 // --- reads -----------------------------------------------------------------------------------
 
+/// The signed-in member, but only if they administer the org named by `slug`.
+///
+/// Org-scoped admin routes need this rather than a bare `is_admin`: the role lives on a member of
+/// one particular org, so an admin of A must not be able to read or write B's data by putting B's
+/// slug in the URL. Returns 404 for a wrong-org admin, not 403, so the URL doesn't confirm that the
+/// other org exists.
+pub async fn require_org_admin(
+    db: &mut Db,
+    headers: &http::HeaderMap,
+    slug: &str,
+) -> ApiResult<Member> {
+    let Some(member) = crate::auth::current_admin(db, headers).await else {
+        return Err(ApiError::unauthorized("admin session required"));
+    };
+    let org = org_by_slug(db, slug).await?;
+    if member.org_id != org.id {
+        return Err(ApiError::not_found("organization not found"));
+    }
+    Ok(member)
+}
+
 pub async fn org_by_slug(db: &mut Db, slug: &str) -> ApiResult<Org> {
     Org::filter_by_slug(slug)
         .first()

@@ -48,17 +48,18 @@ export type createCompetitionResponseError = (createCompetitionResponse400 | cre
 
 export type createCompetitionResponse = (createCompetitionResponseSuccess | createCompetitionResponseError)
 
-export const getCreateCompetitionUrl = () => {
+export const getCreateCompetitionUrl = (slug: string,) => {
 
 
   
 
-  return `/api/admin/competitions`
+  return `/api/orgs/${slug}/admin/competitions`
 }
 
-export const createCompetition = async (createCompetitionRequest: CreateCompetitionRequest, options?: RequestInit): Promise<createCompetitionResponse> => {
+export const createCompetition = async (slug: string,
+    createCompetitionRequest: CreateCompetitionRequest, options?: RequestInit): Promise<createCompetitionResponse> => {
   
-  const res = await fetch(getCreateCompetitionUrl(),
+  const res = await fetch(getCreateCompetitionUrl(slug),
   {      
     ...options,
     method: 'POST',
@@ -78,8 +79,8 @@ export const createCompetition = async (createCompetitionRequest: CreateCompetit
 
 
 export const getCreateCompetitionMutationOptions = <TError = ApiError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompetition>>, TError,{data: CreateCompetitionRequest}, TContext>, fetch?: RequestInit}
-): UseMutationOptions<Awaited<ReturnType<typeof createCompetition>>, TError,{data: CreateCompetitionRequest}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompetition>>, TError,{slug: string;data: CreateCompetitionRequest}, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof createCompetition>>, TError,{slug: string;data: CreateCompetitionRequest}, TContext> => {
 
 const mutationKey = ['createCompetition'];
 const {mutation: mutationOptions, fetch: fetchOptions} = options ?
@@ -91,10 +92,10 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCompetition>>, {data: CreateCompetitionRequest}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCompetition>>, {slug: string;data: CreateCompetitionRequest}> = (props) => {
+          const {slug,data} = props ?? {};
 
-          return  createCompetition(data,fetchOptions)
+          return  createCompetition(slug,data,fetchOptions)
         }
 
         
@@ -107,11 +108,11 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
     export type CreateCompetitionMutationError = ApiError
 
     export const useCreateCompetition = <TError = ApiError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompetition>>, TError,{data: CreateCompetitionRequest}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompetition>>, TError,{slug: string;data: CreateCompetitionRequest}, TContext>, fetch?: RequestInit}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createCompetition>>,
         TError,
-        {data: CreateCompetitionRequest},
+        {slug: string;data: CreateCompetitionRequest},
         TContext
       > => {
 

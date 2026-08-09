@@ -11,7 +11,7 @@ function Nav() {
   const logout = useLogout();
 
   if (!me?.signedIn) {
-    return <a href="/login">Log in</a>;
+    return <a href="/auth/login">Log in</a>;
   }
 
   return (
@@ -21,7 +21,7 @@ function Nav() {
         <a href={`/orgs/${me.orgSlug}/members/${me.memberId}`}>My standing</a>
       )}
       {/* The dashboard is the only thing the admin role unlocks. */}
-      {me.isAdmin && <a href="/admin">Dashboard</a>}
+      {me.isAdmin && me.orgSlug && <a href={`/orgs/${me.orgSlug}/admin`}>Manage</a>}
       <span className="muted">{me.displayName}</span>
       <button
         className="btn ghost sm"
@@ -31,7 +31,7 @@ function Nav() {
             // Full document load, not a soft nav: the session cookie changed, so every cached
             // query is now answering as the wrong user.
             onSuccess: () => {
-              window.location.href = "/login";
+              window.location.href = "/auth/login";
             },
           })
         }

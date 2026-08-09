@@ -43,17 +43,18 @@ export type createInvitesResponseError = (createInvitesResponse401) & {
 
 export type createInvitesResponse = (createInvitesResponseSuccess | createInvitesResponseError)
 
-export const getCreateInvitesUrl = () => {
+export const getCreateInvitesUrl = (slug: string,) => {
 
 
   
 
-  return `/api/admin/invites`
+  return `/api/orgs/${slug}/admin/invites`
 }
 
-export const createInvites = async (createInvitesRequest: CreateInvitesRequest, options?: RequestInit): Promise<createInvitesResponse> => {
+export const createInvites = async (slug: string,
+    createInvitesRequest: CreateInvitesRequest, options?: RequestInit): Promise<createInvitesResponse> => {
   
-  const res = await fetch(getCreateInvitesUrl(),
+  const res = await fetch(getCreateInvitesUrl(slug),
   {      
     ...options,
     method: 'POST',
@@ -73,8 +74,8 @@ export const createInvites = async (createInvitesRequest: CreateInvitesRequest, 
 
 
 export const getCreateInvitesMutationOptions = <TError = ApiError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvites>>, TError,{data: CreateInvitesRequest}, TContext>, fetch?: RequestInit}
-): UseMutationOptions<Awaited<ReturnType<typeof createInvites>>, TError,{data: CreateInvitesRequest}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvites>>, TError,{slug: string;data: CreateInvitesRequest}, TContext>, fetch?: RequestInit}
+): UseMutationOptions<Awaited<ReturnType<typeof createInvites>>, TError,{slug: string;data: CreateInvitesRequest}, TContext> => {
 
 const mutationKey = ['createInvites'];
 const {mutation: mutationOptions, fetch: fetchOptions} = options ?
@@ -86,10 +87,10 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInvites>>, {data: CreateInvitesRequest}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createInvites>>, {slug: string;data: CreateInvitesRequest}> = (props) => {
+          const {slug,data} = props ?? {};
 
-          return  createInvites(data,fetchOptions)
+          return  createInvites(slug,data,fetchOptions)
         }
 
         
@@ -102,11 +103,11 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
     export type CreateInvitesMutationError = ApiError
 
     export const useCreateInvites = <TError = ApiError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvites>>, TError,{data: CreateInvitesRequest}, TContext>, fetch?: RequestInit}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createInvites>>, TError,{slug: string;data: CreateInvitesRequest}, TContext>, fetch?: RequestInit}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof createInvites>>,
         TError,
-        {data: CreateInvitesRequest},
+        {slug: string;data: CreateInvitesRequest},
         TContext
       > => {
 

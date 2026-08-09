@@ -1,10 +1,10 @@
-//! `GET /api/admin/overview` — everything the dashboard shows: aggregate totals across all
+//! `GET /api/orgs/{slug}/admin/overview` — everything the dashboard shows: aggregate totals across all
 //! participants, the competitions, the standings, and the invite list.
 
+use axum::extract::Path;
 use axum::{Extension, Json};
 use http::HeaderMap;
-use linkedin_challenge_server::auth::current_admin;
-use linkedin_challenge_server::dto::{AdminOverview, admin_overview};
+use linkedin_challenge_server::dto::{AdminOverview, admin_overview, require_org_admin};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
 use toasty::Db;
 
@@ -19,11 +19,10 @@ use toasty::Db;
 pub async fn get(
     Extension(mut db): Extension<Db>,
     headers: HeaderMap,
+    Path(slug): Path<String>,
 ) -> ApiResult<Json<AdminOverview>> {
-    // Guarded here as well as in app/admin/middleware.rs: the middleware protects the page, this
+    // Guarded here as well as in the page middleware: the middleware protects the chrome, this
     // protects the data. An API that trusts a page guard is one refactor away from leaking.
-    let Some(admin) = current_admin(&mut db, &headers).await else {
-        return Err(ApiError::unauthorized("admin session required"));
-    };
+    let admin = require_org_admin(&mut db, &headers, &slug).await?;
     Ok(Json(admin_overview(&mut db, &admin).await?))
 }

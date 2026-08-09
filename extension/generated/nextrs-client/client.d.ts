@@ -331,61 +331,6 @@ export interface WeekGroup {
     /** 0-based week index from the competition start. */
     week: number;
 }
-export type createCompetitionResponse200 = {
-    data: CreateCompetitionResponse;
-    status: 200;
-};
-export type createCompetitionResponse400 = {
-    data: ApiError;
-    status: 400;
-};
-export type createCompetitionResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type createCompetitionResponseSuccess = (createCompetitionResponse200) & {
-    headers: Headers;
-};
-export type createCompetitionResponseError = (createCompetitionResponse400 | createCompetitionResponse401) & {
-    headers: Headers;
-};
-export type createCompetitionResponse = (createCompetitionResponseSuccess | createCompetitionResponseError);
-export declare const getCreateCompetitionUrl: () => string;
-export declare const createCompetition: (createCompetitionRequest: CreateCompetitionRequest, options?: RequestInit) => Promise<createCompetitionResponse>;
-export type createInvitesResponse200 = {
-    data: CreateInvitesResponse;
-    status: 200;
-};
-export type createInvitesResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type createInvitesResponseSuccess = (createInvitesResponse200) & {
-    headers: Headers;
-};
-export type createInvitesResponseError = (createInvitesResponse401) & {
-    headers: Headers;
-};
-export type createInvitesResponse = (createInvitesResponseSuccess | createInvitesResponseError);
-export declare const getCreateInvitesUrl: () => string;
-export declare const createInvites: (createInvitesRequest: CreateInvitesRequest, options?: RequestInit) => Promise<createInvitesResponse>;
-export type getAdminOverviewResponse200 = {
-    data: AdminOverview;
-    status: 200;
-};
-export type getAdminOverviewResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type getAdminOverviewResponseSuccess = (getAdminOverviewResponse200) & {
-    headers: Headers;
-};
-export type getAdminOverviewResponseError = (getAdminOverviewResponse401) & {
-    headers: Headers;
-};
-export type getAdminOverviewResponse = (getAdminOverviewResponseSuccess | getAdminOverviewResponseError);
-export declare const getGetAdminOverviewUrl: () => string;
-export declare const getAdminOverview: (options?: RequestInit) => Promise<getAdminOverviewResponse>;
 export type signInDeviceWithSessionResponse200 = {
     data: SessionDeviceResponse;
     status: 200;
@@ -534,6 +479,61 @@ export type getLeaderboardResponseError = (getLeaderboardResponse404) & {
 export type getLeaderboardResponse = (getLeaderboardResponseSuccess | getLeaderboardResponseError);
 export declare const getGetLeaderboardUrl: (slug: string) => string;
 export declare const getLeaderboard: (slug: string, options?: RequestInit) => Promise<getLeaderboardResponse>;
+export type createCompetitionResponse200 = {
+    data: CreateCompetitionResponse;
+    status: 200;
+};
+export type createCompetitionResponse400 = {
+    data: ApiError;
+    status: 400;
+};
+export type createCompetitionResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type createCompetitionResponseSuccess = (createCompetitionResponse200) & {
+    headers: Headers;
+};
+export type createCompetitionResponseError = (createCompetitionResponse400 | createCompetitionResponse401) & {
+    headers: Headers;
+};
+export type createCompetitionResponse = (createCompetitionResponseSuccess | createCompetitionResponseError);
+export declare const getCreateCompetitionUrl: (slug: string) => string;
+export declare const createCompetition: (slug: string, createCompetitionRequest: CreateCompetitionRequest, options?: RequestInit) => Promise<createCompetitionResponse>;
+export type createInvitesResponse200 = {
+    data: CreateInvitesResponse;
+    status: 200;
+};
+export type createInvitesResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type createInvitesResponseSuccess = (createInvitesResponse200) & {
+    headers: Headers;
+};
+export type createInvitesResponseError = (createInvitesResponse401) & {
+    headers: Headers;
+};
+export type createInvitesResponse = (createInvitesResponseSuccess | createInvitesResponseError);
+export declare const getCreateInvitesUrl: (slug: string) => string;
+export declare const createInvites: (slug: string, createInvitesRequest: CreateInvitesRequest, options?: RequestInit) => Promise<createInvitesResponse>;
+export type getAdminOverviewResponse200 = {
+    data: AdminOverview;
+    status: 200;
+};
+export type getAdminOverviewResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type getAdminOverviewResponseSuccess = (getAdminOverviewResponse200) & {
+    headers: Headers;
+};
+export type getAdminOverviewResponseError = (getAdminOverviewResponse401) & {
+    headers: Headers;
+};
+export type getAdminOverviewResponse = (getAdminOverviewResponseSuccess | getAdminOverviewResponseError);
+export declare const getGetAdminOverviewUrl: (slug: string) => string;
+export declare const getAdminOverview: (slug: string, options?: RequestInit) => Promise<getAdminOverviewResponse>;
 export type getMemberDetailResponse200 = {
     data: MemberDetail;
     status: 200;

@@ -24,7 +24,7 @@ export default function Signup() {
               {
                 onSuccess: (res) => {
                   if (res.status === 200) {
-                    window.location.href = "/admin";
+                    window.location.href = `/orgs/${res.data.orgSlug}/admin`;
                   } else {
                     // The server distinguishes "email taken" from "password too short"; show its
                     // wording rather than inventing our own.
@@ -80,7 +80,7 @@ export default function Signup() {
       </div>
 
       <p className="small muted">
-        Already have an account? <a href="/login">Log in</a>.
+        Already have an account? <a href="/auth/login">Log in</a>.
       </p>
     </>
   );

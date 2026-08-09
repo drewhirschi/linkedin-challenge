@@ -1,8 +1,9 @@
-//! `POST /api/admin/competitions` — create a competition with its scoring rules.
+//! `POST /api/orgs/{slug}/admin/competitions` — create a competition with its scoring rules.
 
+use axum::extract::Path;
 use axum::{Extension, Json};
 use http::HeaderMap;
-use linkedin_challenge_server::auth::current_admin;
+use linkedin_challenge_server::dto::require_org_admin;
 use linkedin_challenge_server::models::Competition;
 use linkedin_challenge_server::scoring::ScoringConfig;
 use linkedin_challenge_server::util::{now_unix, parse_date};
@@ -40,11 +41,10 @@ pub struct CreateCompetitionResponse {
 pub async fn post(
     Extension(mut db): Extension<Db>,
     headers: HeaderMap,
+    Path(slug): Path<String>,
     Json(req): Json<CreateCompetitionRequest>,
 ) -> ApiResult<Json<CreateCompetitionResponse>> {
-    let Some(admin) = current_admin(&mut db, &headers).await else {
-        return Err(ApiError::unauthorized("admin session required"));
-    };
+    let admin = require_org_admin(&mut db, &headers, &slug).await?;
 
     let name = req.name.trim();
     if name.is_empty() {

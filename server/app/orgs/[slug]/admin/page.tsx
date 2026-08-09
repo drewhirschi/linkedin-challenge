@@ -53,7 +53,7 @@ function NumberField({
   );
 }
 
-function NewCompetition({ defaults, onCreated }: { defaults: ScoringConfig; onCreated: () => void }) {
+function NewCompetition({ slug, defaults, onCreated }: { slug: string; defaults: ScoringConfig; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [start, setStart] = useState(isoDate());
   const [end, setEnd] = useState(isoDate(90));
@@ -72,7 +72,7 @@ function NewCompetition({ defaults, onCreated }: { defaults: ScoringConfig; onCr
           e.preventDefault();
           setError(null);
           create.mutate(
-            { data: { name, start, end, config: cfg } },
+            { slug, data: { name, start, end, config: cfg } },
             {
               onSuccess: (res) => {
                 if (res.status === 200) {
@@ -207,7 +207,7 @@ function NewCompetition({ defaults, onCreated }: { defaults: ScoringConfig; onCr
   );
 }
 
-function Invites({ onCreated }: { onCreated: () => void }) {
+function Invites({ slug, onCreated }: { slug: string; onCreated: () => void }) {
   const [count, setCount] = useState(5);
   const [role, setRole] = useState("participant");
   const create = useCreateInvites();
@@ -218,7 +218,7 @@ function Invites({ onCreated }: { onCreated: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          create.mutate({ data: { count, role } }, { onSuccess: onCreated });
+          create.mutate({ slug, data: { count, role } }, { onSuccess: onCreated });
         }}
       >
         <div className="field row">
@@ -248,18 +248,19 @@ function Invites({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ params }: { params: { slug: string } }) {
+  const { slug } = params;
   const queryClient = useQueryClient();
-  const { data, isLoading } = useGetAdminOverview();
+  const { data, isLoading } = useGetAdminOverview(slug);
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetAdminOverviewQueryKey(slug) });
 
   if (isLoading) return <div className="spinner">Loading dashboard…</div>;
   if (data?.status !== 200) {
     return (
       <div className="empty">
-        Your session expired. <a href="/login">Log in again</a>.
+        Your session expired. <a href="/auth/login">Log in again</a>.
       </div>
     );
   }
@@ -378,7 +379,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <NewCompetition defaults={defaults} onCreated={refresh} />
+      <NewCompetition slug={slug} defaults={defaults} onCreated={refresh} />
 
       <h2>Invites</h2>
       <div className="panel">
@@ -416,7 +417,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <Invites onCreated={refresh} />
+      <Invites slug={slug} onCreated={refresh} />
     </>
   );
 }

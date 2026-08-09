@@ -1,8 +1,9 @@
-//! `POST /api/admin/invites` — mint one or more single-use invite codes.
+//! `POST /api/orgs/{slug}/admin/invites` — mint one or more single-use invite codes.
 
+use axum::extract::Path;
 use axum::{Extension, Json};
 use http::HeaderMap;
-use linkedin_challenge_server::auth::current_admin;
+use linkedin_challenge_server::dto::require_org_admin;
 use linkedin_challenge_server::models::Invite;
 use linkedin_challenge_server::util::{invite_code, now_unix};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
@@ -35,11 +36,10 @@ pub struct CreateInvitesResponse {
 pub async fn post(
     Extension(mut db): Extension<Db>,
     headers: HeaderMap,
+    Path(slug): Path<String>,
     Json(req): Json<CreateInvitesRequest>,
 ) -> ApiResult<Json<CreateInvitesResponse>> {
-    let Some(admin) = current_admin(&mut db, &headers).await else {
-        return Err(ApiError::unauthorized("admin session required"));
-    };
+    let admin = require_org_admin(&mut db, &headers, &slug).await?;
 
     let count = req.count.unwrap_or(1).clamp(1, 100);
     let role = match req.role.as_deref() {

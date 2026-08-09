@@ -47,17 +47,17 @@ export type getAdminOverviewResponseError = (getAdminOverviewResponse401) & {
 
 export type getAdminOverviewResponse = (getAdminOverviewResponseSuccess | getAdminOverviewResponseError)
 
-export const getGetAdminOverviewUrl = () => {
+export const getGetAdminOverviewUrl = (slug: string,) => {
 
 
   
 
-  return `/api/admin/overview`
+  return `/api/orgs/${slug}/admin/overview`
 }
 
-export const getAdminOverview = async ( options?: RequestInit): Promise<getAdminOverviewResponse> => {
+export const getAdminOverview = async (slug: string, options?: RequestInit): Promise<getAdminOverviewResponse> => {
   
-  const res = await fetch(getGetAdminOverviewUrl(),
+  const res = await fetch(getGetAdminOverviewUrl(slug),
   {      
     ...options,
     method: 'GET'
@@ -76,29 +76,29 @@ export const getAdminOverview = async ( options?: RequestInit): Promise<getAdmin
 
 
 
-export const getGetAdminOverviewQueryKey = () => {
+export const getGetAdminOverviewQueryKey = (slug?: string,) => {
     return [
-    `/api/admin/overview`
+    `/api/orgs/${slug}/admin/overview`
     ] as const;
     }
 
     
-export const getGetAdminOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ApiError>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, fetch?: RequestInit}
+export const getGetAdminOverviewQueryOptions = <TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ApiError>(slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, fetch?: RequestInit}
 ) => {
 
 const {query: queryOptions, fetch: fetchOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetAdminOverviewQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminOverviewQueryKey(slug);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOverview>>> = ({ signal }) => getAdminOverview({ signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminOverview>>> = ({ signal }) => getAdminOverview(slug, { signal, ...fetchOptions });
 
       
 
       
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: !!(slug), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
 export type GetAdminOverviewQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminOverview>>>
@@ -106,7 +106,7 @@ export type GetAdminOverviewQueryError = ApiError
 
 
 export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ApiError>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<
+ slug: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAdminOverview>>,
           TError,
@@ -116,7 +116,7 @@ export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOv
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ApiError>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<
+ slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getAdminOverview>>,
           TError,
@@ -126,16 +126,16 @@ export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOv
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ApiError>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, fetch?: RequestInit}
+ slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
 export function useGetAdminOverview<TData = Awaited<ReturnType<typeof getAdminOverview>>, TError = ApiError>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, fetch?: RequestInit}
+ slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAdminOverview>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetAdminOverviewQueryOptions(options)
+  const queryOptions = getGetAdminOverviewQueryOptions(slug,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -60,9 +60,9 @@ export default function Login() {
       </div>
 
       <p className="small muted">
-        Have an invite code? <a href="/join">Join a challenge</a>.
+        Have an invite code? <a href="/auth/join">Join a challenge</a>.
         <br />
-        Setting up a challenge for your company? <a href="/signup">Create an organization</a>.
+        Setting up a challenge for your company? <a href="/auth/signup">Create an organization</a>.
       </p>
     </>
   );

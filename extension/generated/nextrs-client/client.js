@@ -1,43 +1,3 @@
-export const getCreateCompetitionUrl = () => {
-    return `/api/admin/competitions`;
-};
-export const createCompetition = async (createCompetitionRequest, options) => {
-    const res = await fetch(getCreateCompetitionUrl(), {
-        ...options,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: JSON.stringify(createCompetitionRequest)
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getCreateInvitesUrl = () => {
-    return `/api/admin/invites`;
-};
-export const createInvites = async (createInvitesRequest, options) => {
-    const res = await fetch(getCreateInvitesUrl(), {
-        ...options,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: JSON.stringify(createInvitesRequest)
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getGetAdminOverviewUrl = () => {
-    return `/api/admin/overview`;
-};
-export const getAdminOverview = async (options) => {
-    const res = await fetch(getGetAdminOverviewUrl(), {
-        ...options,
-        method: 'GET'
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
 export const getSignInDeviceWithSessionUrl = () => {
     return `/api/auth/device/session`;
 };
@@ -152,6 +112,46 @@ export const getGetLeaderboardUrl = (slug) => {
 };
 export const getLeaderboard = async (slug, options) => {
     const res = await fetch(getGetLeaderboardUrl(slug), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getCreateCompetitionUrl = (slug) => {
+    return `/api/orgs/${slug}/admin/competitions`;
+};
+export const createCompetition = async (slug, createCompetitionRequest, options) => {
+    const res = await fetch(getCreateCompetitionUrl(slug), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(createCompetitionRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getCreateInvitesUrl = (slug) => {
+    return `/api/orgs/${slug}/admin/invites`;
+};
+export const createInvites = async (slug, createInvitesRequest, options) => {
+    const res = await fetch(getCreateInvitesUrl(slug), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(createInvitesRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetAdminOverviewUrl = (slug) => {
+    return `/api/orgs/${slug}/admin/overview`;
+};
+export const getAdminOverview = async (slug, options) => {
+    const res = await fetch(getGetAdminOverviewUrl(slug), {
         ...options,
         method: 'GET'
     });

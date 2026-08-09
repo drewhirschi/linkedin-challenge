@@ -97,7 +97,7 @@ export default function Join() {
       </div>
 
       <p className="small muted">
-        Already have an account? <a href="/login">Log in</a>.
+        Already have an account? <a href="/auth/login">Log in</a>.
       </p>
     </>
   );

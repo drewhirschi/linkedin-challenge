@@ -8,11 +8,11 @@ use linkedin_challenge_server::auth::{SESSION_COOKIE, cookie};
 use nextrs::conventions::MiddlewareResult;
 
 /// Reachable without a session:
-///  * the sign-in surfaces themselves, or nobody could ever get in;
+///  * the sign-in surfaces under /auth, or nobody could ever get in;
 ///  * the auth API those surfaces post to;
 ///  * the extension protocol, which authenticates with a bearer sync token instead of the cookie.
 fn is_public(path: &str) -> bool {
-    matches!(path, "/login" | "/join" | "/signup")
+    matches!(path, "/auth/login" | "/auth/join" | "/auth/signup")
         || path.starts_with("/api/auth/")
         || path == "/api/link"
         || path == "/api/sync"
@@ -38,7 +38,7 @@ pub async fn handle(req: http::Request<axum::body::Body>) -> MiddlewareResult {
                 (http::StatusCode::UNAUTHORIZED, "sign-in required").into_response(),
             );
         }
-        return MiddlewareResult::response(Redirect::to("/login").into_response());
+        return MiddlewareResult::response(Redirect::to("/auth/login").into_response());
     }
 
     MiddlewareResult::next(req)
