@@ -34,6 +34,12 @@ Reachable signed out: `/login`, `/join` (redeem an invite code), `/signup` (crea
 | `SEED_DEMO` | _(unset)_ | If set, seeds a demo org + competition + participants on first run. |
 | `PORT` | `3000` | Bind port; falls back to the next free port up to +20. |
 
+**Changing a model wipes the dev database.** `push_schema()` cannot alter an existing table, so a
+new field means deleting `linkedin.db` and re-running — every account and every synced post goes
+with it, and any linked extension starts getting 401s because its member row is gone. The extension
+recovers on its own if the browser still has a website session; otherwise it asks the user to press
+Connect. Take a copy into `.backup/` before you do it.
+
 The schema is created on first run only: Toasty's `push_schema()` issues plain `CREATE TABLE` with
 no create-if-missing, so `connect()` probes for an existing table and pushes only when the database
 is empty. It still does not *migrate* — after changing a model, delete `linkedin.db*` (or point

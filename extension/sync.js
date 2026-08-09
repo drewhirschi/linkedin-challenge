@@ -57,13 +57,35 @@ export async function linkIdentityToAccount(syncToken, member) {
 }
 
 // Upload a snapshot batch. Returns the server's response.
+//
+// A 401 here is routine rather than exceptional: the token rotates whenever the account connects
+// from anywhere else, and in development the server's database gets rebuilt out from under it. So
+// we re-exchange the website session once and retry, and only surface an error if that fails too.
+// Telling a user to "re-link" for something we can fix silently is just making them do our work.
 export async function pushSnapshot(payload) {
   const { syncToken } = await getState();
   if (!syncToken) throw new Error("Not linked yet.");
 
-  const res = await pushSync(payload, bearer(syncToken));
+  let res = await pushSync(payload, bearer(syncToken));
 
-  if (res.status === 401) throw new Error("Sync token rejected. Please re-link.");
+  if (res.status === 401) {
+    const account = await signInFromSession();
+    if (!account) {
+      throw new Error(
+        "Your link expired. Open the challenge site, sign in, then press Connect.",
+      );
+    }
+    await setState({
+      syncToken: account.syncToken,
+      orgName: account.orgName,
+      displayName: account.displayName,
+    });
+    res = await pushSync(payload, bearer(account.syncToken)); // once only — no retry loop
+    if (res.status === 401) {
+      throw new Error("Signed in, but the server rejected the new token. Press Connect.");
+    }
+  }
+
   if (res.status !== 200) throw new Error(`Server error (${res.status}).`);
   return res.data;
 }
