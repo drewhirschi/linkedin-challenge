@@ -111,7 +111,7 @@ export async function getProfileViews() {
 // ---- posts ----------------------------------------------------------------
 
 // Recent posts by the member with public engagement (reactions/comments/reposts).
-// Impressions are author-only and fetched separately (getPostAnalytics).
+// Engagement counts (reactions/comments/reposts/impressions) ride along in `included`.
 export async function getPosts(memberUrn) {
   if (!memberUrn) return [];
   let json;
@@ -136,14 +136,14 @@ export async function getPosts(memberUrn) {
     const activityUrn = extractActivityUrn(urn) || extractActivityUrn(JSON.stringify(u));
     if (!activityUrn) continue;
 
-    const social = resolveSocialDetail(json, u);
+    const social = resolveSocialDetail(json, activityUrn);
     posts.push({
       urn: activityUrn,
       permalink: `${LINKEDIN_ORIGIN}/feed/update/${activityUrn}/`,
       createdAt: extractCreatedAt(u, activityUrn),
       textPreview: extractCommentary(u),
       metrics: {
-        impressions: null, // filled by getPostAnalytics
+        impressions: social.impressions,
         reactions: social.reactions,
         comments: social.comments,
         reposts: social.reposts,
@@ -154,43 +154,11 @@ export async function getPosts(memberUrn) {
   return dedupeByUrn(posts);
 }
 
-// Author-only analytics (impressions) for a single post. GraphQL queryId rotates, so this is
-// wrapped defensively and returns null on any failure. See docs for the queryId-discovery plan.
-export async function getPostAnalytics(activityUrn) {
-  if (!activityUrn) return null;
-  try {
-    const queryId = await discoverAnalyticsQueryId();
-    if (!queryId) return null;
-    const variables = `(analyticsEntityUrn:${encodeURIComponent(activityUrn)})`;
-    const json = await voyagerFetch(`/graphql?queryId=${queryId}&variables=${variables}`);
-    const node = firstWith(
-      json,
-      (e) => e && (e.impressionCount != null || e.numImpressions != null)
-    );
-    if (!node) return null;
-    return node.impressionCount ?? node.numImpressions ?? null;
-  } catch {
-    return null;
-  }
-}
-
-// ---- queryId discovery ----------------------------------------------------
-
-let _analyticsQueryIdCache = null;
-// Scrape the current analytics queryId out of a live LinkedIn page. Cached per worker lifetime.
-async function discoverAnalyticsQueryId() {
-  if (_analyticsQueryIdCache) return _analyticsQueryIdCache;
-  try {
-    const res = await fetch(`${LINKEDIN_ORIGIN}/feed/`, { credentials: "include" });
-    const html = await res.text();
-    // queryIds look like: voyagerPremiumDashAnalyticsObject.<hash> or voyagerFeedDashCreatorAnalytics.<hash>
-    const m = html.match(/voyager(?:Premium|Feed)Dash(?:Analytics|CreatorAnalytics)[A-Za-z]*\.[a-f0-9]{16,}/);
-    _analyticsQueryIdCache = m ? m[0] : null;
-    return _analyticsQueryIdCache;
-  } catch {
-    return null;
-  }
-}
+// NOTE: there used to be a GraphQL "author analytics" call here to fetch impressions, guarded by
+// scraping a rotating queryId out of the feed HTML. It never worked (the queryId regex found
+// nothing, so it returned null every time) and it cost one extra request plus a polite delay per
+// post. `numImpressions` on SocialActivityCounts supplies the same number in the response we
+// already fetch, so the whole path is gone.
 
 // ---- parsing helpers ------------------------------------------------------
 
@@ -231,17 +199,31 @@ function extractCreatedAt(update, activityUrn) {
   return createdAtFromUrn(activityUrn);
 }
 
-function resolveSocialDetail(json, update) {
-  // socialDetail may be inline or referenced by urn in `included`.
-  let sd = update.socialDetail;
-  if (!sd && update["*socialDetail"]) {
-    sd = firstWith(json, (e) => e && e.entityUrn === update["*socialDetail"]);
-  }
-  const counts = sd?.totalSocialActivityCounts || sd?.socialActivityCounts || sd || {};
+// Engagement counts for one post.
+//
+// In the normalized envelope `SocialActivityCounts` is its OWN entity in `included`, not an object
+// nested inside `SocialDetail` — `SocialDetail` holds only a reference to it (and `totalShares`).
+// Reading `socialDetail.totalSocialActivityCounts` therefore always came back undefined, which is
+// why every count landed as null.
+//
+// We match by activity URN rather than by chasing the reference key, because the entity URN embeds
+// the activity id — `urn:li:fs_socialActivityCounts:urn:li:activity:123` — and that survives
+// LinkedIn renaming the reference field.
+function resolveSocialDetail(json, activityUrn) {
+  const isCounts = (e) =>
+    (e?.$type || "").endsWith("SocialActivityCounts") ||
+    e?.numLikes != null ||
+    e?.numImpressions != null;
+
+  const counts =
+    included(json).find((e) => isCounts(e) && String(e.entityUrn || "").includes(activityUrn)) || {};
+
   return {
-    reactions: numeric(counts.numLikes ?? counts.reactionCount ?? counts.numReactions),
-    comments: numeric(counts.numComments ?? counts.commentCount),
-    reposts: numeric(counts.numShares ?? counts.shareCount ?? counts.repostCount),
+    reactions: numeric(counts.numLikes),
+    comments: numeric(counts.numComments),
+    reposts: numeric(counts.numShares),
+    // Impressions come from the same entity — no separate author-analytics call needed.
+    impressions: numeric(counts.numImpressions),
   };
 }
 
@@ -266,7 +248,7 @@ function dedupeByUrn(posts) {
 // data instead of guesses. Deliberately returns structure only — entity types and the names of
 // numeric fields — never post text, names, or ids, so the output is safe to paste into an issue.
 export async function diagnose() {
-  const out = { posts: null, networkinfo: null, analyticsQueryId: null };
+  const out = { posts: null, followerCandidates: [] };
 
   const shapeOf = (entity) => ({
     type: entity?.$type || entity?.$recipeType || "(untyped)",
@@ -301,22 +283,40 @@ export async function diagnose() {
     out.posts = { error: String(e.message || e) };
   }
 
-  try {
-    const me = await getMe();
-    const json = await voyagerFetch(
-      `/identity/profiles/${encodeURIComponent(me.publicIdentifier)}/networkinfo`
-    );
-    out.networkinfo = {
-      dataNumericKeys: Object.entries(json?.data || {})
-        .filter(([, v]) => typeof v === "number")
-        .map(([k]) => k),
-      entities: included(json).map(shapeOf),
-    };
-  } catch (e) {
-    out.networkinfo = { error: String(e.message || e) };
+  // The old networkinfo endpoint now answers 410 Gone, so probe candidates and report which ones
+  // respond and what numbers they carry. Cheap, and it beats guessing a second time.
+  const me = await getMe().catch(() => null);
+  const pid = me?.publicIdentifier ? encodeURIComponent(me.publicIdentifier) : null;
+  const candidates = [
+    pid && `/identity/profiles/${pid}/networkinfo`,
+    pid && `/identity/dash/profiles?q=memberIdentity&memberIdentity=${pid}`,
+    pid && `/identity/profiles/${pid}/profileView`,
+    `/me`,
+    `/feed/dash/socialActivityCounts`,
+  ].filter(Boolean);
+
+  for (const path of candidates) {
+    try {
+      const json = await voyagerFetch(path);
+      const numbersIn = (obj) =>
+        Object.entries(obj || {})
+          .filter(([, v]) => typeof v === "number")
+          .map(([k]) => k);
+      out.followerCandidates.push({
+        path,
+        status: "ok",
+        dataNumericKeys: numbersIn(json?.data),
+        entities: included(json)
+          .map((e) => ({ type: e?.$type || "(untyped)", numericKeys: numbersIn(e) }))
+          .filter((e) => e.numericKeys.length)
+          .slice(0, 8),
+      });
+    } catch (e) {
+      out.followerCandidates.push({ path, status: String(e.message || e) });
+    }
+    await sleep(REQUEST_DELAY_MS);
   }
 
-  out.analyticsQueryId = await discoverAnalyticsQueryId();
   return out;
 }
 
@@ -333,13 +333,8 @@ export async function collectSnapshot() {
   const profileViews = await getProfileViews();
   await sleep(REQUEST_DELAY_MS);
 
+  // Posts arrive with their engagement counts already attached — one request, not one per post.
   const posts = await getPosts(me.memberUrn);
-
-  // Enrich each post with author-only impressions, politely spaced.
-  for (const post of posts) {
-    await sleep(REQUEST_DELAY_MS);
-    post.metrics.impressions = await getPostAnalytics(post.urn);
-  }
 
   return {
     me,

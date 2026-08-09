@@ -58,6 +58,20 @@ so the LinkedIn Voyager calls in `linkedin.js` are unaffected.
 Scrapes run about every 6 hours with random jitter, sequentially, with a short delay between
 requests. On repeated `401` it stops and asks the user to re-open LinkedIn rather than hammering.
 
+## What the sync actually reads
+
+One request to `profileUpdatesV2` returns the posts *and* their engagement. In LinkedIn's
+normalized envelope `SocialActivityCounts` is its own entity in `included` — it is not nested
+inside `SocialDetail`, which holds only a reference plus `totalShares`. Reactions, comments,
+reposts and **impressions** (`numLikes` / `numComments` / `numShares` / `numImpressions`) all come
+from there, matched to a post by the activity id embedded in its entity URN.
+
+Post timestamps are decoded from the activity URN itself: LinkedIn ids are snowflake-like, so
+`id >> 22` is the millisecond epoch. No response field, no extra request.
+
+Follower count is currently unavailable — the `networkinfo` endpoint answers `410 Gone`. The
+**Copy diagnostics** button probes replacement endpoints and reports which respond.
+
 ## Known-fragile bits
 
 LinkedIn's internal API is undocumented and changes. Endpoints in `linkedin.js` are best-effort:
