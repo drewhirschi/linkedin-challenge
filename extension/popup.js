@@ -95,6 +95,32 @@ $("sync-btn").addEventListener("click", async () => {
   }
 });
 
+// Copies a structural report of LinkedIn's responses — entity types and the names of numeric
+// fields, never post text or names — so the scrapers can be fixed against real data.
+$("diag-btn").addEventListener("click", async () => {
+  const btn = $("diag-btn");
+  btn.disabled = true;
+  btn.textContent = "Collecting…";
+  try {
+    const res = await send({ type: "DIAGNOSE" });
+    if (!res.ok) throw new Error(res.error || "Couldn't collect diagnostics.");
+    const text = JSON.stringify(res.report, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Diagnostics copied to your clipboard.", "ok");
+    } catch {
+      // Clipboard access can be refused in a popup; the report still needs to reach a human.
+      console.log("[challenge-sync] diagnostics:\n" + text);
+      toast("Clipboard blocked — printed to the popup console instead.", "err");
+    }
+  } catch (e) {
+    toast(e.message || "Couldn't collect diagnostics.", "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Copy diagnostics";
+  }
+});
+
 $("unlink-btn").addEventListener("click", async () => {
   await send({ type: "UNLINK" });
   toast("Unlinked.", "ok");

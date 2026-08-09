@@ -7,6 +7,10 @@ import { SERVER_URL } from "./config.js";
 
 const ALARM = "challenge-sync";
 
+// Convenience for the *service worker* console (chrome://extensions -> "service worker"), where
+// `chrome.runtime` exists but module bindings don't: `await diagnose()`.
+globalThis.diagnose = diagnose;
+
 // (Re)arm the periodic alarm with a little jitter so installs don't sync in lockstep.
 async function scheduleSync() {
   const jitter = (Math.random() * 2 - 1) * SYNC_JITTER_MINUTES; // +/- jitter
