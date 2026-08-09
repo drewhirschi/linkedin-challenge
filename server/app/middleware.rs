@@ -14,6 +14,8 @@ use nextrs::conventions::MiddlewareResult;
 fn is_public(path: &str) -> bool {
     matches!(path, "/auth/login" | "/auth/join" | "/auth/signup")
         || path.starts_with("/api/auth/")
+        // Liveness must answer without a session, or a load balancer sees a redirect.
+        || path == "/api/health"
         || path == "/api/link"
         || path == "/api/sync"
         // Bundles, stylesheet, favicons. Blocking these would break the login page itself.
