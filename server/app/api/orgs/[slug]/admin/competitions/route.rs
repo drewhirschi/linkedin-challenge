@@ -3,8 +3,8 @@
 use axum::extract::Path;
 use axum::{Extension, Json};
 use http::HeaderMap;
-use linkedin_challenge_server::dto::require_org_admin;
-use linkedin_challenge_server::models::Competition;
+use linkedin_challenge_server::dto::{enter_competition, require_org_admin};
+use linkedin_challenge_server::models::{Competition, Member};
 use linkedin_challenge_server::scoring::ScoringConfig;
 use linkedin_challenge_server::util::{now_unix, parse_date};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
@@ -81,6 +81,16 @@ pub async fn post(
     })
     .exec(&mut db)
     .await?;
+
+    // Enter everyone already in the org. Joining is explicit in the data model but implicit in the
+    // product: you're in your org's challenges unless an admin removes you. Admins are excluded —
+    // they run the thing, and an empty admin row on the board is noise.
+    let members = Member::filter(Member::fields().org_id().eq(admin.org_id))
+        .exec(&mut db)
+        .await?;
+    for m in members.iter().filter(|m| !m.is_admin) {
+        enter_competition(&mut db, comp.id, m.id).await?;
+    }
 
     Ok(Json(CreateCompetitionResponse { id: comp.id }))
 }

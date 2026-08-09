@@ -5,21 +5,151 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
-  useMutation
+  useMutation,
+  useQuery
 } from '@tanstack/react-query';
 import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   MutationFunction,
   QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
   UseMutationOptions,
-  UseMutationResult
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
   ApiError,
   CreateCompetitionRequest,
-  CreateCompetitionResponse
+  CreateCompetitionResponse,
+  Leaderboard,
+  MyCompetition
 } from '.././model';
 
+
+
+
+
+export type getMyCompetitionsResponse200 = {
+  data: MyCompetition[]
+  status: 200
+}
+
+export type getMyCompetitionsResponse401 = {
+  data: ApiError
+  status: 401
+}
+    
+export type getMyCompetitionsResponseSuccess = (getMyCompetitionsResponse200) & {
+  headers: Headers;
+};
+export type getMyCompetitionsResponseError = (getMyCompetitionsResponse401) & {
+  headers: Headers;
+};
+
+export type getMyCompetitionsResponse = (getMyCompetitionsResponseSuccess | getMyCompetitionsResponseError)
+
+export const getGetMyCompetitionsUrl = () => {
+
+
+  
+
+  return `/api/me/competitions`
+}
+
+export const getMyCompetitions = async ( options?: RequestInit): Promise<getMyCompetitionsResponse> => {
+  
+  const res = await fetch(getGetMyCompetitionsUrl(),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: getMyCompetitionsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getMyCompetitionsResponse
+}
+
+
+
+
+
+export const getGetMyCompetitionsQueryKey = () => {
+    return [
+    `/api/me/competitions`
+    ] as const;
+    }
+
+    
+export const getGetMyCompetitionsQueryOptions = <TData = Awaited<ReturnType<typeof getMyCompetitions>>, TError = ApiError>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyCompetitions>>, TError, TData>>, fetch?: RequestInit}
+) => {
+
+const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyCompetitionsQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyCompetitions>>> = ({ signal }) => getMyCompetitions({ signal, ...fetchOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyCompetitions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMyCompetitionsQueryResult = NonNullable<Awaited<ReturnType<typeof getMyCompetitions>>>
+export type GetMyCompetitionsQueryError = ApiError
+
+
+export function useGetMyCompetitions<TData = Awaited<ReturnType<typeof getMyCompetitions>>, TError = ApiError>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyCompetitions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMyCompetitions>>,
+          TError,
+          Awaited<ReturnType<typeof getMyCompetitions>>
+        > , 'initialData'
+      >, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMyCompetitions<TData = Awaited<ReturnType<typeof getMyCompetitions>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyCompetitions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMyCompetitions>>,
+          TError,
+          Awaited<ReturnType<typeof getMyCompetitions>>
+        > , 'initialData'
+      >, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetMyCompetitions<TData = Awaited<ReturnType<typeof getMyCompetitions>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyCompetitions>>, TError, TData>>, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetMyCompetitions<TData = Awaited<ReturnType<typeof getMyCompetitions>>, TError = ApiError>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMyCompetitions>>, TError, TData>>, fetch?: RequestInit}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetMyCompetitionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
 
 
 
@@ -120,4 +250,130 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
 
       return useMutation(mutationOptions, queryClient);
     }
+    export type getCompetitionLeaderboardResponse200 = {
+  data: Leaderboard
+  status: 200
+}
+
+export type getCompetitionLeaderboardResponse404 = {
+  data: ApiError
+  status: 404
+}
     
+export type getCompetitionLeaderboardResponseSuccess = (getCompetitionLeaderboardResponse200) & {
+  headers: Headers;
+};
+export type getCompetitionLeaderboardResponseError = (getCompetitionLeaderboardResponse404) & {
+  headers: Headers;
+};
+
+export type getCompetitionLeaderboardResponse = (getCompetitionLeaderboardResponseSuccess | getCompetitionLeaderboardResponseError)
+
+export const getGetCompetitionLeaderboardUrl = (slug: string,
+    cid: number,) => {
+
+
+  
+
+  return `/api/orgs/${slug}/competitions/${cid}`
+}
+
+export const getCompetitionLeaderboard = async (slug: string,
+    cid: number, options?: RequestInit): Promise<getCompetitionLeaderboardResponse> => {
+  
+  const res = await fetch(getGetCompetitionLeaderboardUrl(slug,cid),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+)
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+  
+  const data: getCompetitionLeaderboardResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getCompetitionLeaderboardResponse
+}
+
+
+
+
+
+export const getGetCompetitionLeaderboardQueryKey = (slug?: string,
+    cid?: number,) => {
+    return [
+    `/api/orgs/${slug}/competitions/${cid}`
+    ] as const;
+    }
+
+    
+export const getGetCompetitionLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError = ApiError>(slug: string,
+    cid: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError, TData>>, fetch?: RequestInit}
+) => {
+
+const {query: queryOptions, fetch: fetchOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompetitionLeaderboardQueryKey(slug,cid);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompetitionLeaderboard>>> = ({ signal }) => getCompetitionLeaderboard(slug,cid, { signal, ...fetchOptions });
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(slug && cid), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCompetitionLeaderboardQueryResult = NonNullable<Awaited<ReturnType<typeof getCompetitionLeaderboard>>>
+export type GetCompetitionLeaderboardQueryError = ApiError
+
+
+export function useGetCompetitionLeaderboard<TData = Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError = ApiError>(
+ slug: string,
+    cid: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCompetitionLeaderboard>>,
+          TError,
+          Awaited<ReturnType<typeof getCompetitionLeaderboard>>
+        > , 'initialData'
+      >, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCompetitionLeaderboard<TData = Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError = ApiError>(
+ slug: string,
+    cid: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCompetitionLeaderboard>>,
+          TError,
+          Awaited<ReturnType<typeof getCompetitionLeaderboard>>
+        > , 'initialData'
+      >, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCompetitionLeaderboard<TData = Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError = ApiError>(
+ slug: string,
+    cid: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError, TData>>, fetch?: RequestInit}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+
+export function useGetCompetitionLeaderboard<TData = Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError = ApiError>(
+ slug: string,
+    cid: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompetitionLeaderboard>>, TError, TData>>, fetch?: RequestInit}
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCompetitionLeaderboardQueryOptions(slug,cid,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+

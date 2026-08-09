@@ -54,6 +54,11 @@ pub struct Org {
     pub competitions: toasty::Deferred<Vec<Competition>>,
 }
 
+/// Key for [`CompetitionEntry::entry_key`].
+pub fn entry_key(competition_id: i64, member_id: i64) -> String {
+    format!("{competition_id}:{member_id}")
+}
+
 /// A person in an org. Participants sync via the extension; admins manage the challenge.
 #[derive(Debug, toasty::Model)]
 pub struct Member {
@@ -144,6 +149,34 @@ pub struct Competition {
 
     pub is_active: bool,
     pub created_at: i64,
+}
+
+/// A member's entry in one competition — what "joined" actually means.
+///
+/// Before this, everyone in an org was implicitly in every competition, so there was no answer to
+/// "which competitions am I in", no way to run two at once without them bleeding together, and no
+/// way to sit one out. A leaderboard now ranks a competition's *entrants*.
+#[derive(Debug, toasty::Model)]
+pub struct CompetitionEntry {
+    #[key]
+    #[auto]
+    pub id: i64,
+    #[index]
+    pub competition_id: i64,
+    #[belongs_to(key = competition_id, references = id)]
+    pub competition: toasty::Deferred<Competition>,
+
+    #[index]
+    pub member_id: i64,
+    #[belongs_to(key = member_id, references = id)]
+    pub member: toasty::Deferred<Member>,
+
+    /// `{competition_id}:{member_id}` — Toasty has no composite unique key, so this stands in for
+    /// one and stops a double-enrolment from ever reaching the table.
+    #[unique]
+    pub entry_key: String,
+
+    pub joined_at: i64,
 }
 
 /// A post authored by a member. Deduped by LinkedIn URN.

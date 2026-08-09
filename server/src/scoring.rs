@@ -122,12 +122,27 @@ pub struct Standing {
 }
 
 /// Compute the full leaderboard for a competition, sorted by total score descending.
+/// Rank a competition's entrants.
+///
+/// Entrants, not "everyone in the org": a competition is something you join, so an org can run two
+/// at once and a member can sit one out. Members with an entry but no collected data are still
+/// skipped by `score_member`.
 pub async fn compute_standings(db: &mut Db, comp: &Competition) -> toasty::Result<Vec<Standing>> {
     let cfg = ScoringConfig::from_competition(comp);
 
-    let members = Member::filter(Member::fields().org_id().eq(comp.org_id))
+    let entries =
+        crate::models::CompetitionEntry::filter(
+            crate::models::CompetitionEntry::fields().competition_id().eq(comp.id),
+        )
         .exec(&mut *db)
         .await?;
+
+    let mut members = Vec::new();
+    for e in &entries {
+        if let Some(m) = Member::filter_by_id(e.member_id).first().exec(&mut *db).await? {
+            members.push(m);
+        }
+    }
 
     let mut standings = Vec::new();
     for member in &members {

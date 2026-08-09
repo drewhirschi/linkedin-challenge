@@ -3,7 +3,7 @@
 
 use toasty::Db;
 
-use crate::models::{Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot};
+use crate::models::{Competition, CompetitionEntry, Member, Org, Post, PostSnapshot, ProfileSnapshot, entry_key};
 use crate::scoring::ScoringConfig;
 use crate::auth::hash_password;
 use crate::util::{new_bearer_token, now_unix};
@@ -93,7 +93,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
     .await?;
 
     let cfg = ScoringConfig::default();
-    toasty::create!(Competition {
+    let comp = toasty::create!(Competition {
         org_id: org.id,
         name: "Autumn Posting Sprint",
         start_at: start,
@@ -151,6 +151,16 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
             password_hash: Some(hash_password(DEMO_PASSWORD)),
             api_token_hash: token_hash,
             created_at: now,
+        })
+        .exec(&mut *db)
+        .await?;
+
+        // Enter the demo competition — a leaderboard ranks entrants now, not everyone in the org.
+        toasty::create!(CompetitionEntry {
+            competition_id: comp.id,
+            member_id: member.id,
+            entry_key: entry_key(comp.id, member.id),
+            joined_at: now,
         })
         .exec(&mut *db)
         .await?;

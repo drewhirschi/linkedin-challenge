@@ -21,7 +21,7 @@ import type {
 
 import type {
   ApiError,
-  Leaderboard,
+  OrgDetail,
   OrgSummary
 } from '.././model';
 
@@ -141,26 +141,26 @@ export function useListOrgs<TData = Awaited<ReturnType<typeof listOrgs>>, TError
 
 
 
-export type getLeaderboardResponse200 = {
-  data: Leaderboard
+export type getOrgResponse200 = {
+  data: OrgDetail
   status: 200
 }
 
-export type getLeaderboardResponse404 = {
+export type getOrgResponse404 = {
   data: ApiError
   status: 404
 }
     
-export type getLeaderboardResponseSuccess = (getLeaderboardResponse200) & {
+export type getOrgResponseSuccess = (getOrgResponse200) & {
   headers: Headers;
 };
-export type getLeaderboardResponseError = (getLeaderboardResponse404) & {
+export type getOrgResponseError = (getOrgResponse404) & {
   headers: Headers;
 };
 
-export type getLeaderboardResponse = (getLeaderboardResponseSuccess | getLeaderboardResponseError)
+export type getOrgResponse = (getOrgResponseSuccess | getOrgResponseError)
 
-export const getGetLeaderboardUrl = (slug: string,) => {
+export const getGetOrgUrl = (slug: string,) => {
 
 
   
@@ -168,9 +168,9 @@ export const getGetLeaderboardUrl = (slug: string,) => {
   return `/api/orgs/${slug}`
 }
 
-export const getLeaderboard = async (slug: string, options?: RequestInit): Promise<getLeaderboardResponse> => {
+export const getOrg = async (slug: string, options?: RequestInit): Promise<getOrgResponse> => {
   
-  const res = await fetch(getGetLeaderboardUrl(slug),
+  const res = await fetch(getGetOrgUrl(slug),
   {      
     ...options,
     method: 'GET'
@@ -181,74 +181,74 @@ export const getLeaderboard = async (slug: string, options?: RequestInit): Promi
 
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   
-  const data: getLeaderboardResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getLeaderboardResponse
+  const data: getOrgResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getOrgResponse
 }
 
 
 
 
 
-export const getGetLeaderboardQueryKey = (slug?: string,) => {
+export const getGetOrgQueryKey = (slug?: string,) => {
     return [
     `/api/orgs/${slug}`
     ] as const;
     }
 
     
-export const getGetLeaderboardQueryOptions = <TData = Awaited<ReturnType<typeof getLeaderboard>>, TError = ApiError>(slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData>>, fetch?: RequestInit}
+export const getGetOrgQueryOptions = <TData = Awaited<ReturnType<typeof getOrg>>, TError = ApiError>(slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOrg>>, TError, TData>>, fetch?: RequestInit}
 ) => {
 
 const {query: queryOptions, fetch: fetchOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetLeaderboardQueryKey(slug);
+  const queryKey =  queryOptions?.queryKey ?? getGetOrgQueryKey(slug);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLeaderboard>>> = ({ signal }) => getLeaderboard(slug, { signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOrg>>> = ({ signal }) => getOrg(slug, { signal, ...fetchOptions });
 
       
 
       
 
-   return  { queryKey, queryFn, enabled: !!(slug), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: !!(slug), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOrg>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetLeaderboardQueryResult = NonNullable<Awaited<ReturnType<typeof getLeaderboard>>>
-export type GetLeaderboardQueryError = ApiError
+export type GetOrgQueryResult = NonNullable<Awaited<ReturnType<typeof getOrg>>>
+export type GetOrgQueryError = ApiError
 
 
-export function useGetLeaderboard<TData = Awaited<ReturnType<typeof getLeaderboard>>, TError = ApiError>(
- slug: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData>> & Pick<
+export function useGetOrg<TData = Awaited<ReturnType<typeof getOrg>>, TError = ApiError>(
+ slug: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOrg>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getLeaderboard>>,
+          Awaited<ReturnType<typeof getOrg>>,
           TError,
-          Awaited<ReturnType<typeof getLeaderboard>>
+          Awaited<ReturnType<typeof getOrg>>
         > , 'initialData'
       >, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetLeaderboard<TData = Awaited<ReturnType<typeof getLeaderboard>>, TError = ApiError>(
- slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData>> & Pick<
+export function useGetOrg<TData = Awaited<ReturnType<typeof getOrg>>, TError = ApiError>(
+ slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOrg>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getLeaderboard>>,
+          Awaited<ReturnType<typeof getOrg>>,
           TError,
-          Awaited<ReturnType<typeof getLeaderboard>>
+          Awaited<ReturnType<typeof getOrg>>
         > , 'initialData'
       >, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetLeaderboard<TData = Awaited<ReturnType<typeof getLeaderboard>>, TError = ApiError>(
- slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData>>, fetch?: RequestInit}
+export function useGetOrg<TData = Awaited<ReturnType<typeof getOrg>>, TError = ApiError>(
+ slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOrg>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
-export function useGetLeaderboard<TData = Awaited<ReturnType<typeof getLeaderboard>>, TError = ApiError>(
- slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getLeaderboard>>, TError, TData>>, fetch?: RequestInit}
+export function useGetOrg<TData = Awaited<ReturnType<typeof getOrg>>, TError = ApiError>(
+ slug: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getOrg>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetLeaderboardQueryOptions(slug,options)
+  const queryOptions = getGetOrgQueryOptions(slug,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

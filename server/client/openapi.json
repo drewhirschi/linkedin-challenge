@@ -286,6 +286,39 @@
         }
       }
     },
+    "/api/me/competitions": {
+      "get": {
+        "tags": [
+          "competitions"
+        ],
+        "operationId": "getMyCompetitions",
+        "responses": {
+          "200": {
+            "description": "Competitions you have entered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MyCompetition"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orgs": {
       "get": {
         "tags": [
@@ -314,7 +347,7 @@
         "tags": [
           "orgs"
         ],
-        "operationId": "getLeaderboard",
+        "operationId": "getOrg",
         "parameters": [
           {
             "name": "slug",
@@ -327,11 +360,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Standings and competition rules",
+            "description": "The org and its competitions",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Leaderboard"
+                  "$ref": "#/components/schemas/OrgDetail"
                 }
               }
             }
@@ -499,7 +532,56 @@
         }
       }
     },
-    "/api/orgs/{slug}/members/{id}": {
+    "/api/orgs/{slug}/competitions/{cid}": {
+      "get": {
+        "tags": [
+          "competitions"
+        ],
+        "operationId": "getCompetitionLeaderboard",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Standings for this competition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Leaderboard"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such organization or competition",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/orgs/{slug}/competitions/{cid}/members/{id}": {
       "get": {
         "tags": [
           "members"
@@ -512,6 +594,15 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "cid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
             }
           },
           {
@@ -1233,6 +1324,66 @@
               "null"
             ],
             "format": "int64"
+          }
+        }
+      },
+      "MyCompetition": {
+        "type": "object",
+        "description": "One competition a member has entered, plus where they stand in it — the home page's row.",
+        "required": [
+          "org",
+          "competition",
+          "entrants"
+        ],
+        "properties": {
+          "competition": {
+            "$ref": "#/components/schemas/CompetitionInfo"
+          },
+          "entrants": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "org": {
+            "$ref": "#/components/schemas/OrgSummary"
+          },
+          "standing": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StandingRow",
+                "description": "Absent until the member has collected data inside the window."
+              }
+            ]
+          }
+        }
+      },
+      "OrgDetail": {
+        "type": "object",
+        "description": "An org and the competitions it runs.",
+        "required": [
+          "org",
+          "competitions",
+          "entrantCounts"
+        ],
+        "properties": {
+          "competitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompetitionInfo"
+            }
+          },
+          "entrantCounts": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Entrant count per competition, index-aligned with `competitions`."
+          },
+          "org": {
+            "$ref": "#/components/schemas/OrgSummary"
           }
         }
       },

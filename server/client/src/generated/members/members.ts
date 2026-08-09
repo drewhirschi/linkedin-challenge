@@ -48,18 +48,20 @@ export type getMemberDetailResponseError = (getMemberDetailResponse404) & {
 export type getMemberDetailResponse = (getMemberDetailResponseSuccess | getMemberDetailResponseError)
 
 export const getGetMemberDetailUrl = (slug: string,
+    cid: number,
     id: number,) => {
 
 
   
 
-  return `/api/orgs/${slug}/members/${id}`
+  return `/api/orgs/${slug}/competitions/${cid}/members/${id}`
 }
 
 export const getMemberDetail = async (slug: string,
+    cid: number,
     id: number, options?: RequestInit): Promise<getMemberDetailResponse> => {
   
-  const res = await fetch(getGetMemberDetailUrl(slug,id),
+  const res = await fetch(getGetMemberDetailUrl(slug,cid,id),
   {      
     ...options,
     method: 'GET'
@@ -79,30 +81,32 @@ export const getMemberDetail = async (slug: string,
 
 
 export const getGetMemberDetailQueryKey = (slug?: string,
+    cid?: number,
     id?: number,) => {
     return [
-    `/api/orgs/${slug}/members/${id}`
+    `/api/orgs/${slug}/competitions/${cid}/members/${id}`
     ] as const;
     }
 
     
 export const getGetMemberDetailQueryOptions = <TData = Awaited<ReturnType<typeof getMemberDetail>>, TError = ApiError>(slug: string,
+    cid: number,
     id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMemberDetail>>, TError, TData>>, fetch?: RequestInit}
 ) => {
 
 const {query: queryOptions, fetch: fetchOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetMemberDetailQueryKey(slug,id);
+  const queryKey =  queryOptions?.queryKey ?? getGetMemberDetailQueryKey(slug,cid,id);
 
   
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMemberDetail>>> = ({ signal }) => getMemberDetail(slug,id, { signal, ...fetchOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMemberDetail>>> = ({ signal }) => getMemberDetail(slug,cid,id, { signal, ...fetchOptions });
 
       
 
       
 
-   return  { queryKey, queryFn, enabled: !!(slug && id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMemberDetail>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, enabled: !!(slug && cid && id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMemberDetail>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
 export type GetMemberDetailQueryResult = NonNullable<Awaited<ReturnType<typeof getMemberDetail>>>
@@ -111,6 +115,7 @@ export type GetMemberDetailQueryError = ApiError
 
 export function useGetMemberDetail<TData = Awaited<ReturnType<typeof getMemberDetail>>, TError = ApiError>(
  slug: string,
+    cid: number,
     id: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMemberDetail>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMemberDetail>>,
@@ -122,6 +127,7 @@ export function useGetMemberDetail<TData = Awaited<ReturnType<typeof getMemberDe
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetMemberDetail<TData = Awaited<ReturnType<typeof getMemberDetail>>, TError = ApiError>(
  slug: string,
+    cid: number,
     id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMemberDetail>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getMemberDetail>>,
@@ -133,17 +139,19 @@ export function useGetMemberDetail<TData = Awaited<ReturnType<typeof getMemberDe
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetMemberDetail<TData = Awaited<ReturnType<typeof getMemberDetail>>, TError = ApiError>(
  slug: string,
+    cid: number,
     id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMemberDetail>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 
 export function useGetMemberDetail<TData = Awaited<ReturnType<typeof getMemberDetail>>, TError = ApiError>(
  slug: string,
+    cid: number,
     id: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getMemberDetail>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetMemberDetailQueryOptions(slug,id,options)
+  const queryOptions = getGetMemberDetailQueryOptions(slug,cid,id,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

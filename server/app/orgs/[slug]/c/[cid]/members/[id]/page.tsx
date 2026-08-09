@@ -77,10 +77,14 @@ function Week({ group, gradedPerWeek }: { group: WeekGroup; gradedPerWeek: numbe
   );
 }
 
-export default function MemberStats({ params }: { params: { slug: string; id: string } }) {
-  const { slug } = params;
+export default function MemberStats({
+  params,
+}: {
+  params: { slug: string; cid: string; id: string };
+}) {
+  const { slug, cid } = params;
   const id = Number(params.id);
-  const { data, isLoading } = useGetMemberDetail(slug, id);
+  const { data, isLoading } = useGetMemberDetail(slug, Number(cid), id);
 
   if (isLoading) return <div className="spinner">Loading stats…</div>;
   if (data?.status !== 200) {
@@ -93,7 +97,7 @@ export default function MemberStats({ params }: { params: { slug: string; id: st
   return (
     <>
       <p className="small muted">
-        <a href={`/orgs/${slug}`}>← {detail.org.name} leaderboard</a>
+        <a href={`/orgs/${slug}/c/${cid}`}>← {competition?.name ?? detail.org.name} leaderboard</a>
       </p>
 
       <div className="who" style={{ gap: 14, marginBottom: 4 }}>

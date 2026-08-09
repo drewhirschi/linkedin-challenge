@@ -52,6 +52,26 @@ account, and the only thing it unlocks is the admin dashboard.
   token (`/api/auth/device`); it stores the token, never the password. It is the one caller that
   does not use the session cookie, because it acts on the member's behalf from another origin.
 
+## Layout
+
+| URL | Who | What |
+|---|---|---|
+| `/` | any signed-in member | the competitions you've entered, and your rank in each |
+| `/orgs/{slug}` | members | the org's competitions, running and finished |
+| `/orgs/{slug}/c/{id}` | members | **the leaderboard** for one competition, with its rules |
+| `/orgs/{slug}/c/{id}/members/{id}` | members | an entrant's posts inside that competition's window |
+| `/orgs/{slug}/admin` | admins of that org | set up competitions, invites, aggregate progress |
+| `/auth/login`, `/auth/join`, `/auth/signup` | anyone | the only pages reachable signed out |
+
+**Competitions are joined, not inherited.** A `CompetitionEntry` records a member's place in one
+competition, so an org can run several at once, a leaderboard ranks that competition's entrants,
+and someone can sit one out. Entry is automatic in practice — redeeming an invite enters you in the
+org's live competitions, and creating a competition enters the org's existing participants — but it
+is a real row, so it can be revoked.
+
+There is no system-wide admin. Administration is org-scoped: the role lives on a membership, so an
+admin of one org has no access to another.
+
 ## UI screens
 
 **Admin**

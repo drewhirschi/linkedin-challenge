@@ -195,6 +195,26 @@ export interface Metrics {
     saves?: MetricsSaves;
     sends?: MetricsSends;
 }
+export type MyCompetitionStanding = null | StandingRow;
+/**
+ * One competition a member has entered, plus where they stand in it — the home page's row.
+ */
+export interface MyCompetition {
+    competition: CompetitionInfo;
+    /** @minimum 0 */
+    entrants: number;
+    org: OrgSummary;
+    standing?: MyCompetitionStanding;
+}
+/**
+ * An org and the competitions it runs.
+ */
+export interface OrgDetail {
+    competitions: CompetitionInfo[];
+    /** Entrant count per competition, index-aligned with `competitions`. */
+    entrantCounts: number[];
+    org: OrgSummary;
+}
 export interface OrgSummary {
     name: string;
     slug: string;
@@ -452,6 +472,23 @@ export type linkIdentityResponseError = (linkIdentityResponse401 | linkIdentityR
 export type linkIdentityResponse = (linkIdentityResponseSuccess | linkIdentityResponseError);
 export declare const getLinkIdentityUrl: () => string;
 export declare const linkIdentity: (linkRequest: LinkRequest, options?: RequestInit) => Promise<linkIdentityResponse>;
+export type getMyCompetitionsResponse200 = {
+    data: MyCompetition[];
+    status: 200;
+};
+export type getMyCompetitionsResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type getMyCompetitionsResponseSuccess = (getMyCompetitionsResponse200) & {
+    headers: Headers;
+};
+export type getMyCompetitionsResponseError = (getMyCompetitionsResponse401) & {
+    headers: Headers;
+};
+export type getMyCompetitionsResponse = (getMyCompetitionsResponseSuccess | getMyCompetitionsResponseError);
+export declare const getGetMyCompetitionsUrl: () => string;
+export declare const getMyCompetitions: (options?: RequestInit) => Promise<getMyCompetitionsResponse>;
 export type listOrgsResponse200 = {
     data: OrgSummary[];
     status: 200;
@@ -462,23 +499,23 @@ export type listOrgsResponseSuccess = (listOrgsResponse200) & {
 export type listOrgsResponse = (listOrgsResponseSuccess);
 export declare const getListOrgsUrl: () => string;
 export declare const listOrgs: (options?: RequestInit) => Promise<listOrgsResponse>;
-export type getLeaderboardResponse200 = {
-    data: Leaderboard;
+export type getOrgResponse200 = {
+    data: OrgDetail;
     status: 200;
 };
-export type getLeaderboardResponse404 = {
+export type getOrgResponse404 = {
     data: ApiError;
     status: 404;
 };
-export type getLeaderboardResponseSuccess = (getLeaderboardResponse200) & {
+export type getOrgResponseSuccess = (getOrgResponse200) & {
     headers: Headers;
 };
-export type getLeaderboardResponseError = (getLeaderboardResponse404) & {
+export type getOrgResponseError = (getOrgResponse404) & {
     headers: Headers;
 };
-export type getLeaderboardResponse = (getLeaderboardResponseSuccess | getLeaderboardResponseError);
-export declare const getGetLeaderboardUrl: (slug: string) => string;
-export declare const getLeaderboard: (slug: string, options?: RequestInit) => Promise<getLeaderboardResponse>;
+export type getOrgResponse = (getOrgResponseSuccess | getOrgResponseError);
+export declare const getGetOrgUrl: (slug: string) => string;
+export declare const getOrg: (slug: string, options?: RequestInit) => Promise<getOrgResponse>;
 export type createCompetitionResponse200 = {
     data: CreateCompetitionResponse;
     status: 200;
@@ -534,6 +571,23 @@ export type getAdminOverviewResponseError = (getAdminOverviewResponse401) & {
 export type getAdminOverviewResponse = (getAdminOverviewResponseSuccess | getAdminOverviewResponseError);
 export declare const getGetAdminOverviewUrl: (slug: string) => string;
 export declare const getAdminOverview: (slug: string, options?: RequestInit) => Promise<getAdminOverviewResponse>;
+export type getCompetitionLeaderboardResponse200 = {
+    data: Leaderboard;
+    status: 200;
+};
+export type getCompetitionLeaderboardResponse404 = {
+    data: ApiError;
+    status: 404;
+};
+export type getCompetitionLeaderboardResponseSuccess = (getCompetitionLeaderboardResponse200) & {
+    headers: Headers;
+};
+export type getCompetitionLeaderboardResponseError = (getCompetitionLeaderboardResponse404) & {
+    headers: Headers;
+};
+export type getCompetitionLeaderboardResponse = (getCompetitionLeaderboardResponseSuccess | getCompetitionLeaderboardResponseError);
+export declare const getGetCompetitionLeaderboardUrl: (slug: string, cid: number) => string;
+export declare const getCompetitionLeaderboard: (slug: string, cid: number, options?: RequestInit) => Promise<getCompetitionLeaderboardResponse>;
 export type getMemberDetailResponse200 = {
     data: MemberDetail;
     status: 200;
@@ -549,8 +603,8 @@ export type getMemberDetailResponseError = (getMemberDetailResponse404) & {
     headers: Headers;
 };
 export type getMemberDetailResponse = (getMemberDetailResponseSuccess | getMemberDetailResponseError);
-export declare const getGetMemberDetailUrl: (slug: string, id: number) => string;
-export declare const getMemberDetail: (slug: string, id: number, options?: RequestInit) => Promise<getMemberDetailResponse>;
+export declare const getGetMemberDetailUrl: (slug: string, cid: number, id: number) => string;
+export declare const getMemberDetail: (slug: string, cid: number, id: number, options?: RequestInit) => Promise<getMemberDetailResponse>;
 export type pushSyncResponse200 = {
     data: SyncResponse;
     status: 200;

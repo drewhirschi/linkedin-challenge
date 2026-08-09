@@ -1,4 +1,5 @@
-//! `GET /api/orgs/{slug}/members/{id}` — one participant's posts, bucketed by scoring week.
+//! `GET /api/orgs/{slug}/competitions/{cid}/members/{id}` — one participant's posts in that
+//! competition, bucketed by its scoring weeks.
 //!
 //! Serves two screens: an admin looking at someone's stats, and a participant looking at their
 //! own standing. Same payload; the difference is only who navigates to it.
@@ -19,7 +20,7 @@ use toasty::Db;
 )]
 pub async fn get(
     Extension(mut db): Extension<Db>,
-    Path((slug, id)): Path<(String, i64)>,
+    Path((slug, cid, id)): Path<(String, i64, i64)>,
 ) -> Result<Json<MemberDetail>, ApiError> {
-    Ok(Json(member_detail(&mut db, &slug, id).await?))
+    Ok(Json(member_detail(&mut db, &slug, cid, id).await?))
 }

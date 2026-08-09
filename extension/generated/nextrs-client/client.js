@@ -94,6 +94,18 @@ export const linkIdentity = async (linkRequest, options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
+export const getGetMyCompetitionsUrl = () => {
+    return `/api/me/competitions`;
+};
+export const getMyCompetitions = async (options) => {
+    const res = await fetch(getGetMyCompetitionsUrl(), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
 ;
 export const getListOrgsUrl = () => {
     return `/api/orgs`;
@@ -107,11 +119,11 @@ export const listOrgs = async (options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
-export const getGetLeaderboardUrl = (slug) => {
+export const getGetOrgUrl = (slug) => {
     return `/api/orgs/${slug}`;
 };
-export const getLeaderboard = async (slug, options) => {
-    const res = await fetch(getGetLeaderboardUrl(slug), {
+export const getOrg = async (slug, options) => {
+    const res = await fetch(getGetOrgUrl(slug), {
         ...options,
         method: 'GET'
     });
@@ -159,11 +171,23 @@ export const getAdminOverview = async (slug, options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
-export const getGetMemberDetailUrl = (slug, id) => {
-    return `/api/orgs/${slug}/members/${id}`;
+export const getGetCompetitionLeaderboardUrl = (slug, cid) => {
+    return `/api/orgs/${slug}/competitions/${cid}`;
 };
-export const getMemberDetail = async (slug, id, options) => {
-    const res = await fetch(getGetMemberDetailUrl(slug, id), {
+export const getCompetitionLeaderboard = async (slug, cid, options) => {
+    const res = await fetch(getGetCompetitionLeaderboardUrl(slug, cid), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetMemberDetailUrl = (slug, cid, id) => {
+    return `/api/orgs/${slug}/competitions/${cid}/members/${id}`;
+};
+export const getMemberDetail = async (slug, cid, id, options) => {
+    const res = await fetch(getGetMemberDetailUrl(slug, cid, id), {
         ...options,
         method: 'GET'
     });
