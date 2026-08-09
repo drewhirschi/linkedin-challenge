@@ -38,7 +38,12 @@ Reachable signed out: `/login`, `/join` (redeem an invite code), `/signup` (crea
 new field means deleting `linkedin.db` and re-running — every account and every synced post goes
 with it, and any linked extension starts getting 401s because its member row is gone. The extension
 recovers on its own if the browser still has a website session; otherwise it asks the user to press
-Connect. Take a copy into `.backup/` before you do it.
+Connect.
+
+Back up with `./backup-db.sh` first, **not** by copying `linkedin.db`. libsql keeps recent writes in
+`linkedin.db-wal`, so copying the database file alone can produce a file with no tables in it —
+that has already happened once here, and the real data was deleted along with the WAL. The script
+folds the WAL in and refuses to leave behind a backup with zero tables.
 
 The schema is created on first run only: Toasty's `push_schema()` issues plain `CREATE TABLE` with
 no create-if-missing, so `connect()` probes for an existing table and pushes only when the database
