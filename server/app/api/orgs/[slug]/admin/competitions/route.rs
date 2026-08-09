@@ -7,7 +7,7 @@ use linkedin_challenge_server::dto::{enter_competition, require_org_admin};
 use linkedin_challenge_server::models::{Competition, Member};
 use linkedin_challenge_server::scoring::ScoringConfig;
 use linkedin_challenge_server::util::{now_unix, parse_date};
-use linkedin_challenge_server::web::{ApiError, ApiResult};
+use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
@@ -30,7 +30,6 @@ pub struct CreateCompetitionResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "createCompetition",
     responses(
         (status = 200, description = "Competition created", body = CreateCompetitionResponse),
@@ -43,7 +42,7 @@ pub async fn post(
     headers: HeaderMap,
     Path(slug): Path<String>,
     Json(req): Json<CreateCompetitionRequest>,
-) -> ApiResult<Json<CreateCompetitionResponse>> {
+) -> Result<Json<CreateCompetitionResponse>, ApiError> {
     let admin = require_org_admin(&mut db, &headers, &slug).await?;
 
     let name = req.name.trim();

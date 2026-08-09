@@ -12,7 +12,7 @@ use axum::{Extension, Json};
 use linkedin_challenge_server::auth::member_from_session_token;
 use linkedin_challenge_server::models::{Member, Org};
 use linkedin_challenge_server::util::new_bearer_token;
-use linkedin_challenge_server::web::{ApiError, ApiResult};
+use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
@@ -37,7 +37,6 @@ pub struct SessionDeviceResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "signInDeviceWithSession",
     responses(
         (status = 200, description = "Sync token issued for this device", body = SessionDeviceResponse),
@@ -47,7 +46,7 @@ pub struct SessionDeviceResponse {
 pub async fn post(
     Extension(mut db): Extension<Db>,
     Json(req): Json<SessionDeviceRequest>,
-) -> ApiResult<Json<SessionDeviceResponse>> {
+) -> Result<Json<SessionDeviceResponse>, ApiError> {
     let Some(member) = member_from_session_token(&mut db, &req.session_token).await else {
         return Err(ApiError::unauthorized("not signed in"));
     };

@@ -5,7 +5,7 @@ use axum::{Extension, Json};
 use http::HeaderMap;
 use linkedin_challenge_server::auth::current_member;
 use linkedin_challenge_server::dto::org_slug;
-use linkedin_challenge_server::web::ApiResult;
+use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
@@ -21,15 +21,11 @@ pub struct MeResponse {
     pub member_id: Option<i64>,
 }
 
-#[nextrs::api(
-    get,
-    operation_id = "getMe",
-    responses((status = 200, description = "Current session", body = MeResponse)),
-)]
+#[nextrs::api(operation_id = "getMe")]
 pub async fn get(
     Extension(mut db): Extension<Db>,
     headers: HeaderMap,
-) -> ApiResult<Json<MeResponse>> {
+) -> Result<Json<MeResponse>, ApiError> {
     let Some(member) = current_member(&mut db, &headers).await else {
         return Ok(Json(MeResponse {
             signed_in: false,

@@ -151,10 +151,11 @@
         "tags": [
           "logout"
         ],
+        "summary": "Sign out",
         "operationId": "logout",
         "responses": {
           "200": {
-            "description": "Signed out",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -174,7 +175,7 @@
         "operationId": "getMe",
         "responses": {
           "200": {
-            "description": "Current session",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -324,10 +325,11 @@
         "tags": [
           "orgs"
         ],
+        "summary": "Organizations",
         "operationId": "listOrgs",
         "responses": {
           "200": {
-            "description": "Organizations",
+            "description": "",
             "content": {
               "application/json": {
                 "schema": {

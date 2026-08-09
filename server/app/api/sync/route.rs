@@ -6,7 +6,7 @@ use http::HeaderMap;
 use linkedin_challenge_server::auth::member_from_bearer;
 use linkedin_challenge_server::models::{Post, PostComment, PostSnapshot, ProfileSnapshot};
 use linkedin_challenge_server::util::{now_unix, parse_iso8601};
-use linkedin_challenge_server::web::{ApiError, ApiResult};
+use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
@@ -75,7 +75,6 @@ pub struct SyncResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "pushSync",
     responses(
         (status = 200, description = "Snapshot batch ingested", body = SyncResponse),
@@ -86,7 +85,7 @@ pub async fn post(
     Extension(mut db): Extension<Db>,
     headers: HeaderMap,
     Json(req): Json<SyncRequest>,
-) -> ApiResult<Json<SyncResponse>> {
+) -> Result<Json<SyncResponse>, ApiError> {
     let Some(member) = member_from_bearer(&mut db, &headers).await else {
         return Err(ApiError::unauthorized("invalid or missing sync token"));
     };

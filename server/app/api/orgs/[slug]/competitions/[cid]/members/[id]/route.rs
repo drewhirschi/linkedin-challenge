@@ -11,7 +11,6 @@ use linkedin_challenge_server::web::ApiError;
 use toasty::Db;
 
 #[nextrs::api(
-    get,
     operation_id = "getMemberDetail",
     responses(
         (status = 200, description = "The member's standing and posts by week", body = MemberDetail),

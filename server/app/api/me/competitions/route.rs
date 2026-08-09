@@ -9,7 +9,6 @@ use linkedin_challenge_server::web::ApiError;
 use toasty::Db;
 
 #[nextrs::api(
-    get,
     operation_id = "getMyCompetitions",
     responses(
         (status = 200, description = "Competitions you have entered", body = Vec<MyCompetition>),

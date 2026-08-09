@@ -10,7 +10,6 @@ use linkedin_challenge_server::web::ApiError;
 use toasty::Db;
 
 #[nextrs::api(
-    get,
     operation_id = "getCompetitionLeaderboard",
     responses(
         (status = 200, description = "Standings for this competition", body = Leaderboard),

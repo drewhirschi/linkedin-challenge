@@ -24,7 +24,6 @@ pub struct SessionResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "login",
     responses(
         (status = 200, description = "Signed in; session cookie set", body = SessionResponse),

@@ -2112,7 +2112,7 @@ checksum = "2195bf6aa996a481483b29d62a7663eed3fe39600c460e323f8ff41e90bdd89b"
 [[package]]
 name = "nextrs"
 version = "0.5.0"
-source = "git+https://github.com/drewhirschi/nextrs.git?rev=6a3356b#6a3356b2f3abf2c3816e7dd58f6aa8e1f6e9eea5"
+source = "git+https://github.com/drewhirschi/nextrs.git?rev=e0cb679#e0cb679bfda190f29cca08fb8e12faa25ab1d376"
 dependencies = [
  "askama",
  "async-stream",
@@ -2162,7 +2162,7 @@ dependencies = [
 [[package]]
 name = "nextrs-macros"
 version = "0.1.6"
-source = "git+https://github.com/drewhirschi/nextrs.git?rev=6a3356b#6a3356b2f3abf2c3816e7dd58f6aa8e1f6e9eea5"
+source = "git+https://github.com/drewhirschi/nextrs.git?rev=e0cb679#e0cb679bfda190f29cca08fb8e12faa25ab1d376"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -22,6 +22,9 @@ import type {
 
 
 
+/**
+ * @summary Sign out
+ */
 export type logoutResponse200 = {
   data: LogoutResponse
   status: 200
@@ -91,7 +94,10 @@ const {mutation: mutationOptions, fetch: fetchOptions} = options ?
     
     export type LogoutMutationError = unknown
 
-    export const useLogout = <TError = unknown,
+    /**
+ * @summary Sign out
+ */
+export const useLogout = <TError = unknown,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError,void, TContext>, fetch?: RequestInit}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof logout>>,

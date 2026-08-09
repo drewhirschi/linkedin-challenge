@@ -1,0 +1,28 @@
+{
+  // Editors resolve a .tsx file against the NEAREST tsconfig above it. Without this one, opening
+  // app/**/page.tsx finds no project at all: "@server/client" is unresolvable and every callback
+  // parameter is an implicit any — even though `npm run typecheck` in client/ passes, because that
+  // config reaches down into ../app. The typecheck and the editor were using different worlds.
+  //
+  // This lives at the app root so it is the one an editor finds first, and it is the single source
+  // of compiler options; client/tsconfig.json extends it.
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    // Resolved relative to THIS file. The bundler resolves the same alias out of
+    // client/node_modules at build time; this is only for the type-checker and the editor.
+    "paths": {
+      "@server/client": ["./client/src/index.ts"]
+    },
+    "typeRoots": ["./client/node_modules/@types"]
+  },
+  "include": ["app/**/*.tsx", "app/**/*.ts", "client/src"]
+}

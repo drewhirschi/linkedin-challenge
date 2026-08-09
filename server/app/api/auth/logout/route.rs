@@ -12,10 +12,13 @@ pub struct LogoutResponse {
     pub ok: bool,
 }
 
+/// Sign out
+//
+// The tuple return (headers + body) is what clears the cookie, and inference cannot see a body
+// through it — so this response stays declared by hand.
 #[nextrs::api(
-    post,
     operation_id = "logout",
-    responses((status = 200, description = "Signed out", body = LogoutResponse)),
+    responses((status = 200, body = LogoutResponse)),
 )]
 pub async fn post(
     Extension(mut db): Extension<Db>,

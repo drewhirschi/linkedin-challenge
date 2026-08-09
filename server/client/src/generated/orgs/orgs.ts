@@ -29,6 +29,9 @@ import type {
 
 
 
+/**
+ * @summary Organizations
+ */
 export type listOrgsResponse200 = {
   data: OrgSummary[]
   status: 200
@@ -123,6 +126,9 @@ export function useListOrgs<TData = Awaited<ReturnType<typeof listOrgs>>, TError
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listOrgs>>, TError, TData>>, fetch?: RequestInit}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Organizations
+ */
 
 export function useListOrgs<TData = Awaited<ReturnType<typeof listOrgs>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listOrgs>>, TError, TData>>, fetch?: RequestInit}

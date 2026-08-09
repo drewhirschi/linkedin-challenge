@@ -37,7 +37,6 @@ pub struct JoinResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "joinWithInvite",
     responses(
         (status = 200, description = "Account created and signed in", body = JoinResponse),

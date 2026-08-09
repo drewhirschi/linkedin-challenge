@@ -19,13 +19,13 @@ name = "dump-openapi"
 path = "src/bin/dump-openapi.rs"
 
 [build-dependencies]
-nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "6a3356b", features = [
+nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "e0cb679", features = [
     "build",
     "tsx",
 ] }
 
 [dependencies]
-nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "6a3356b", features = [
+nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "e0cb679", features = [
     "vercel",
 ] }
 # Toasty with the `turso` driver = libsql. Local file now (`turso:linkedin.db`), hosted Turso later.

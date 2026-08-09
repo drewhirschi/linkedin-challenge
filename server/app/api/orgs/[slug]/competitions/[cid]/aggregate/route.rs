@@ -12,7 +12,6 @@ use linkedin_challenge_server::web::ApiError;
 use toasty::Db;
 
 #[nextrs::api(
-    get,
     operation_id = "getCompetitionAggregate",
     responses(
         (status = 200, description = "Totals across this competition", body = Aggregate),

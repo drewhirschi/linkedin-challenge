@@ -50,10 +50,32 @@ no create-if-missing, so `connect()` probes for an existing table and pushes onl
 is empty. It still does not *migrate* — after changing a model, delete `linkedin.db*` (or point
 `DATABASE_URL` at a fresh file) to recreate.
 
+### Editor setup
+
+`tsconfig.json` at this directory's root exists so an editor opening `app/**/page.tsx` finds a
+project — editors resolve against the *nearest* tsconfig above the file, and `client/tsconfig.json`
+only reaches down into `../app`. Without the root one, `@server/client` reads as an unresolvable
+module and every callback parameter is an implicit `any`, while `npm run typecheck` still passes.
+`client/tsconfig.json` extends it, so both see the same options.
+
+If the editor reports every generated hook as missing, run the generation order below —
+`client/src/generated/index.ts` is written by `cargo build` and deleted by `npm run gen`, so
+between the two the alias resolves to a barrel exporting nothing.
+
 ### Changing an API route
 
 `route.rs` handlers annotated with `#[nextrs::api]` are the source of the OpenAPI document, which
-generates both clients: the React Query hooks the pages use, and the plain-JS client the Chrome
+generates both clients. Keep those attributes minimal: the macro infers the HTTP method from the
+function name, the path from the file, params from the extractors, the request body from
+`Json<T>`, and the 200 response from the return type. Only genuine overrides belong in the
+attribute — a custom `operation_id` (which sets the hook name), and error responses.
+
+Two things defeat that inference, both silently: returning a type *alias* such as
+`ApiResult<Json<T>>` instead of `Result<Json<T>, ApiError>`, and returning a tuple like
+`(HeaderMap, Json<T>)`. Either yields an operation with no response schema, so spell the type out
+or declare the response by hand.
+
+Generation: the React Query hooks the pages use, and the plain-JS client the Chrome
 extension imports. After changing a handler's path, params, body, or response:
 
 ```sh

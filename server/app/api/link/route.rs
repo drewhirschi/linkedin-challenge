@@ -11,7 +11,7 @@ use http::HeaderMap;
 use linkedin_challenge_server::auth::member_from_bearer;
 use linkedin_challenge_server::dto::org_slug;
 use linkedin_challenge_server::models::{Member, Org};
-use linkedin_challenge_server::web::{ApiError, ApiResult};
+use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
@@ -42,7 +42,6 @@ pub struct LinkResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "linkIdentity",
     responses(
         (status = 200, description = "LinkedIn identity bound to this account", body = LinkResponse),
@@ -54,7 +53,7 @@ pub async fn post(
     Extension(mut db): Extension<Db>,
     headers: HeaderMap,
     Json(req): Json<LinkRequest>,
-) -> ApiResult<Json<LinkResponse>> {
+) -> Result<Json<LinkResponse>, ApiError> {
     let Some(member) = member_from_bearer(&mut db, &headers).await else {
         return Err(ApiError::unauthorized("invalid or missing sync token"));
     };

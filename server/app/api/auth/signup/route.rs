@@ -27,7 +27,6 @@ pub struct SignupResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "signup",
     responses(
         (status = 200, description = "Organization created; session cookie set", body = SignupResponse),

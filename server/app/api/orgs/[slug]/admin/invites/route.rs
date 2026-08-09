@@ -26,7 +26,6 @@ pub struct CreateInvitesResponse {
 }
 
 #[nextrs::api(
-    post,
     operation_id = "createInvites",
     responses(
         (status = 200, description = "Codes generated", body = CreateInvitesResponse),
@@ -38,7 +37,7 @@ pub async fn post(
     headers: HeaderMap,
     Path(slug): Path<String>,
     Json(req): Json<CreateInvitesRequest>,
-) -> ApiResult<Json<CreateInvitesResponse>> {
+) -> Result<Json<CreateInvitesResponse>, ApiError> {
     let admin = require_org_admin(&mut db, &headers, &slug).await?;
 
     let count = req.count.unwrap_or(1).clamp(1, 100);
