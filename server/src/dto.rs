@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
 
-use crate::models::{Competition, Invite, Member, Org, Post, PostSnapshot};
+use crate::models::{Competition, Invite, Member, Org, Post, PostComment, PostSnapshot};
 use crate::scoring::{
     ScoringConfig, Standing, WEEK_SECONDS, active_competition, compute_standings,
 };
@@ -104,8 +104,18 @@ pub struct PostStat {
     pub text_preview: Option<String>,
     pub impressions: i64,
     pub reactions: i64,
+    /// LinkedIn's total comment count.
     pub comments: i64,
+    /// Comments by people other than the author — what actually scores. Equals `comments` until
+    /// we have read the comment list for this post.
+    pub comments_by_others: i64,
     pub reposts: i64,
+    pub sends: i64,
+    pub saves: i64,
+    pub impressions_in_network: i64,
+    pub impressions_out_of_network: i64,
+    pub profile_viewers_from_post: i64,
+    pub followers_from_post: i64,
     /// False when the post falls outside the competition window.
     pub in_window: bool,
 }
@@ -244,6 +254,16 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
     let earliest = snaps.first().map(|s| s.captured_at).unwrap_or(0);
     let latest = snaps.last();
 
+    // Comments we actually read, minus the author's own — None when we've read none.
+    let comment_rows = PostComment::filter(PostComment::fields().post_id().eq(post.id))
+        .exec(&mut *db)
+        .await?;
+    let others = if comment_rows.is_empty() {
+        None
+    } else {
+        Some(comment_rows.iter().filter(|c| !c.is_self).count() as i64)
+    };
+
     let posted_at = if post.created_at > 0 {
         post.created_at
     } else {
@@ -260,7 +280,18 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
             impressions: latest.and_then(|s| s.impressions).unwrap_or(0),
             reactions: latest.and_then(|s| s.reactions).unwrap_or(0),
             comments: latest.and_then(|s| s.comments).unwrap_or(0),
+            comments_by_others: others.unwrap_or(latest.and_then(|s| s.comments).unwrap_or(0)),
             reposts: latest.and_then(|s| s.reposts).unwrap_or(0),
+            sends: latest.and_then(|s| s.sends).unwrap_or(0),
+            saves: latest.and_then(|s| s.saves).unwrap_or(0),
+            impressions_in_network: latest.and_then(|s| s.impressions_in_network).unwrap_or(0),
+            impressions_out_of_network: latest
+                .and_then(|s| s.impressions_out_of_network)
+                .unwrap_or(0),
+            profile_viewers_from_post: latest
+                .and_then(|s| s.profile_viewers_from_post)
+                .unwrap_or(0),
+            followers_from_post: latest.and_then(|s| s.followers_from_post).unwrap_or(0),
             in_window: false,
         },
         posted_at,
@@ -355,7 +386,14 @@ fn clone_stat(s: &PostStat) -> PostStat {
         impressions: s.impressions,
         reactions: s.reactions,
         comments: s.comments,
+        comments_by_others: s.comments_by_others,
         reposts: s.reposts,
+        sends: s.sends,
+        saves: s.saves,
+        impressions_in_network: s.impressions_in_network,
+        impressions_out_of_network: s.impressions_out_of_network,
+        profile_viewers_from_post: s.profile_viewers_from_post,
+        followers_from_post: s.followers_from_post,
         in_window: s.in_window,
     }
 }

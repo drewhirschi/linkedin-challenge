@@ -4,7 +4,7 @@
 use axum::{Extension, Json};
 use http::HeaderMap;
 use linkedin_challenge_server::auth::member_from_bearer;
-use linkedin_challenge_server::models::{Post, PostSnapshot, ProfileSnapshot};
+use linkedin_challenge_server::models::{Post, PostComment, PostSnapshot, ProfileSnapshot};
 use linkedin_challenge_server::util::{now_unix, parse_iso8601};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,19 @@ pub struct PostPayload {
     pub created_at: Option<String>,
     pub text_preview: Option<String>,
     pub metrics: Metrics,
+    /// Comments the extension could read, with their authors. Absent or empty simply means we
+    /// didn't read any this time — it is not a claim that the post has none.
+    #[serde(default)]
+    pub comments: Vec<CommentPayload>,
+}
+
+#[derive(Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentPayload {
+    pub urn: String,
+    pub commenter_urn: String,
+    pub commenter_name: Option<String>,
+    pub created_at: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -45,6 +58,12 @@ pub struct Metrics {
     pub reactions: Option<i64>,
     pub comments: Option<i64>,
     pub reposts: Option<i64>,
+    pub sends: Option<i64>,
+    pub saves: Option<i64>,
+    pub impressions_in_network: Option<i64>,
+    pub impressions_out_of_network: Option<i64>,
+    pub profile_viewers_from_post: Option<i64>,
+    pub followers_from_post: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -128,9 +147,41 @@ pub async fn post(
             reactions: p.metrics.reactions,
             comments: p.metrics.comments,
             reposts: p.metrics.reposts,
+            sends: p.metrics.sends,
+            saves: p.metrics.saves,
+            impressions_in_network: p.metrics.impressions_in_network,
+            impressions_out_of_network: p.metrics.impressions_out_of_network,
+            profile_viewers_from_post: p.metrics.profile_viewers_from_post,
+            followers_from_post: p.metrics.followers_from_post,
         })
         .exec(&mut db)
         .await?;
+
+        // Comments are facts, not readings: upsert by URN so a re-sync doesn't duplicate them.
+        // `is_self` is decided here, against the member who owns the post, so scoring never has to
+        // re-derive it from a URN comparison that could drift.
+        for c in &p.comments {
+            if PostComment::filter_by_urn(&c.urn)
+                .first()
+                .exec(&mut db)
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            toasty::create!(PostComment {
+                post_id,
+                urn: &c.urn,
+                commenter_urn: &c.commenter_urn,
+                commenter_name: c.commenter_name.clone(),
+                is_self: c.commenter_urn == member.linkedin_urn,
+                created_at: c.created_at.as_deref().and_then(parse_iso8601).unwrap_or(0),
+                captured_at,
+            })
+            .exec(&mut db)
+            .await?;
+        }
+
         ingested += 1;
     }
 

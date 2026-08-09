@@ -23,4 +23,7 @@ export interface ScoringConfig {
   perProfileView: number;
   perReaction: number;
   perRepost: number;
+  perSave: number;
+  /** A "send" is a private share — high intent, so usually worth more than a public repost. */
+  perSend: number;
 }

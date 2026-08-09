@@ -141,6 +141,18 @@ function NewCompetition({ defaults, onCreated }: { defaults: ScoringConfig; onCr
             step="0.1"
             onChange={(n) => set({ perRepost: n })}
           />
+          <NumberField
+            label="Points per send"
+            value={cfg.perSend}
+            step="0.1"
+            onChange={(n) => set({ perSend: n })}
+          />
+          <NumberField
+            label="Points per save"
+            value={cfg.perSave}
+            step="0.1"
+            onChange={(n) => set({ perSave: n })}
+          />
         </div>
 
         <h4 className="muted small" style={{ margin: "14px 0 8px" }}>

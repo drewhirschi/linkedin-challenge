@@ -133,6 +133,8 @@ pub struct Competition {
     pub per_reaction: f64,
     pub per_comment: f64,
     pub per_repost: f64,
+    pub per_send: f64,
+    pub per_save: f64,
     pub per_impression: f64,
     pub per_follower_gained: f64,
     pub per_profile_view: f64,
@@ -164,6 +166,8 @@ pub struct Post {
 
     #[has_many]
     pub snapshots: toasty::Deferred<Vec<PostSnapshot>>,
+    #[has_many]
+    pub comments_seen: toasty::Deferred<Vec<PostComment>>,
 }
 
 /// A time-series metric reading for a post. Append-only; latest-in-window wins when scoring.
@@ -180,8 +184,50 @@ pub struct PostSnapshot {
     pub captured_at: i64,
     pub impressions: Option<i64>,
     pub reactions: Option<i64>,
+    /// LinkedIn's own comment total. `PostComment` rows are what we actually read, and scoring
+    /// uses those so a member's own comments can be excluded.
     pub comments: Option<i64>,
     pub reposts: Option<i64>,
+    /// Shares sent privately (LinkedIn's "sends").
+    pub sends: Option<i64>,
+    pub saves: Option<i64>,
+
+    // Impression breakdown and downstream effects, from the author-only post analytics page.
+    // All optional: a sync that couldn't read them stores None rather than a misleading zero.
+    pub impressions_in_network: Option<i64>,
+    pub impressions_out_of_network: Option<i64>,
+    pub profile_viewers_from_post: Option<i64>,
+    pub followers_from_post: Option<i64>,
+}
+
+/// One comment on a post, with its author — so a member's own comments can be excluded from
+/// scoring, and so reciprocal-comment rings stay visible later.
+///
+/// Not a snapshot: a comment is a fact that happened once, so rows are upserted by `urn` rather
+/// than appended per sync. `PostSnapshot.comments` keeps LinkedIn's own total; these rows are what
+/// we actually saw, and the two can differ when a sync only reads the first page.
+#[derive(Debug, toasty::Model)]
+pub struct PostComment {
+    #[key]
+    #[auto]
+    pub id: i64,
+    #[index]
+    pub post_id: i64,
+    #[belongs_to(key = post_id, references = id)]
+    pub post: toasty::Deferred<Post>,
+
+    /// LinkedIn's comment URN. Unique, so a re-sync updates rather than duplicates.
+    #[unique]
+    pub urn: String,
+    /// LinkedIn member URN of whoever wrote it.
+    pub commenter_urn: String,
+    pub commenter_name: Option<String>,
+    /// True when the commenter is the post's own author — these don't score.
+    pub is_self: bool,
+    /// Comment creation time (unix secs), 0 when unknown.
+    pub created_at: i64,
+    /// When we first recorded it.
+    pub captured_at: i64,
 }
 
 /// A time-series reading of a member's profile-level metrics.

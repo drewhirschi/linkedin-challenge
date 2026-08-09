@@ -696,6 +696,33 @@
           }
         }
       },
+      "CommentPayload": {
+        "type": "object",
+        "required": [
+          "urn",
+          "commenterUrn"
+        ],
+        "properties": {
+          "commenterName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "commenterUrn": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "urn": {
+            "type": "string"
+          }
+        }
+      },
       "CompetitionInfo": {
         "type": "object",
         "required": [
@@ -1114,7 +1141,35 @@
             ],
             "format": "int64"
           },
+          "followersFromPost": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
           "impressions": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "impressionsInNetwork": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "impressionsOutOfNetwork": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "profileViewersFromPost": {
             "type": [
               "integer",
               "null"
@@ -1129,6 +1184,20 @@
             "format": "int64"
           },
           "reposts": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "saves": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "sends": {
             "type": [
               "integer",
               "null"
@@ -1160,6 +1229,13 @@
           "metrics"
         ],
         "properties": {
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommentPayload"
+            },
+            "description": "Comments the extension could read, with their authors. Absent or empty simply means we\ndidn't read any this time — it is not a claim that the post has none."
+          },
           "createdAt": {
             "type": [
               "string",
@@ -1193,11 +1269,28 @@
           "impressions",
           "reactions",
           "comments",
+          "commentsByOthers",
           "reposts",
+          "sends",
+          "saves",
+          "impressionsInNetwork",
+          "impressionsOutOfNetwork",
+          "profileViewersFromPost",
+          "followersFromPost",
           "inWindow"
         ],
         "properties": {
           "comments": {
+            "type": "integer",
+            "format": "int64",
+            "description": "LinkedIn's total comment count."
+          },
+          "commentsByOthers": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Comments by people other than the author — what actually scores. Equals `comments` until\nwe have read the comment list for this post."
+          },
+          "followersFromPost": {
             "type": "integer",
             "format": "int64"
           },
@@ -1206,6 +1299,14 @@
             "format": "int64"
           },
           "impressions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "impressionsInNetwork": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "impressionsOutOfNetwork": {
             "type": "integer",
             "format": "int64"
           },
@@ -1221,11 +1322,23 @@
             "format": "int64",
             "description": "Post creation time, or the first snapshot's time when LinkedIn didn't give us one."
           },
+          "profileViewersFromPost": {
+            "type": "integer",
+            "format": "int64"
+          },
           "reactions": {
             "type": "integer",
             "format": "int64"
           },
           "reposts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "saves": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sends": {
             "type": "integer",
             "format": "int64"
           },
@@ -1267,6 +1380,8 @@
           "perReaction",
           "perComment",
           "perRepost",
+          "perSend",
+          "perSave",
           "perImpression",
           "perFollowerGained",
           "perProfileView",
@@ -1319,6 +1434,17 @@
           "perRepost": {
             "type": "number",
             "format": "double",
+            "default": 5.0
+          },
+          "perSave": {
+            "type": "number",
+            "format": "double",
+            "default": 3.0
+          },
+          "perSend": {
+            "type": "number",
+            "format": "double",
+            "description": "A \"send\" is a private share — high intent, so usually worth more than a public repost.",
             "default": 5.0
           }
         }

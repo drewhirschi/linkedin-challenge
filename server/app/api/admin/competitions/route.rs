@@ -69,6 +69,8 @@ pub async fn post(
         per_reaction: req.config.per_reaction,
         per_comment: req.config.per_comment,
         per_repost: req.config.per_repost,
+        per_send: req.config.per_send,
+        per_save: req.config.per_save,
         per_impression: req.config.per_impression,
         per_follower_gained: req.config.per_follower_gained,
         per_profile_view: req.config.per_profile_view,

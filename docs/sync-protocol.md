@@ -82,3 +82,21 @@ Errors: `401` bad/expired token.
 - Each sync writes one `ProfileSnapshot` and one `PostSnapshot` per post (append-only, time series).
 - `Post` rows are upserted by `(user, urn)`; snapshots are always inserted.
 - Scores are computed from snapshots at read time — the ingest never computes score.
+
+
+## Validation targets
+
+Real values from one account (2026-08-09), for checking the scrapers produce sane numbers rather
+than plausible-looking ones:
+
+| Metric | Actual | Where the user sees it |
+|---|---|---|
+| Followers | 945 | Profile → followers, under activity |
+| Profile views | 672 | Analytics |
+| Post impressions (all posts) | 19,833 | Analytics |
+| Search appearances | 53 | Analytics |
+
+Followers and profile views are **not currently collected** — the Voyager REST endpoints that used
+to expose them (`networkinfo`, `profileView`, `wvmpCards`, `feed/dash/followingStates`) now answer
+410 or 400, and a recursive search of the profile responses finds no follower-shaped number at any
+depth. They will need either GraphQL or a DOM read of the analytics page.

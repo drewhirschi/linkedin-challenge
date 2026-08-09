@@ -4,11 +4,12 @@
 import { useGetMemberDetail, fmtInt, fmtNum, fmtDate, initials } from "@server/client";
 import type { PostStat, WeekGroup } from "@server/client";
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
     <div className="metric">
       <span className="n">{fmtInt(value)}</span>
       <span className="k">{label}</span>
+      {sub && <span className="k muted">{sub}</span>}
     </div>
   );
 }
@@ -20,9 +21,28 @@ function Post({ post }: { post: PostStat }) {
       <div className="metrics">
         <Metric label="Impressions" value={post.impressions} />
         <Metric label="Reactions" value={post.reactions} />
-        <Metric label="Comments" value={post.comments} />
+        {/* Only other people's comments score, so show that number and keep the raw total beside
+            it — otherwise a post whose comments are all the author's own looks mis-scored. */}
+        <Metric
+          label={post.comments !== post.commentsByOthers ? "Comments (others)" : "Comments"}
+          value={post.commentsByOthers}
+          sub={post.comments !== post.commentsByOthers ? `${post.comments} total` : undefined}
+        />
         <Metric label="Reposts" value={post.reposts} />
+        <Metric label="Sends" value={post.sends} />
+        <Metric label="Saves" value={post.saves} />
       </div>
+      {(post.impressionsInNetwork > 0 ||
+        post.impressionsOutOfNetwork > 0 ||
+        post.profileViewersFromPost > 0 ||
+        post.followersFromPost > 0) && (
+        <div className="metrics" style={{ marginTop: 8 }}>
+          <Metric label="In-network" value={post.impressionsInNetwork} />
+          <Metric label="Out-of-network" value={post.impressionsOutOfNetwork} />
+          <Metric label="Profile views from post" value={post.profileViewersFromPost} />
+          <Metric label="Followers from post" value={post.followersFromPost} />
+        </div>
+      )}
       <p className="small muted" style={{ marginBottom: 0, marginTop: 8 }}>
         {fmtDate(post.postedAt)}
         {post.permalink && (

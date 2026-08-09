@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 
-use crate::models::{Competition, Member, Post, PostSnapshot, ProfileSnapshot};
+use crate::models::{Competition, Member, Post, PostComment, PostSnapshot, ProfileSnapshot};
 
 pub const WEEK_SECONDS: i64 = 7 * 86400;
 
@@ -26,6 +26,11 @@ pub struct ScoringConfig {
     pub per_comment: f64,
     #[schema(required)]
     pub per_repost: f64,
+    /// A "send" is a private share — high intent, so usually worth more than a public repost.
+    #[schema(required)]
+    pub per_send: f64,
+    #[schema(required)]
+    pub per_save: f64,
     #[schema(required)]
     pub per_impression: f64,
     #[schema(required)]
@@ -46,6 +51,8 @@ impl Default for ScoringConfig {
             per_reaction: 1.0,
             per_comment: 3.0,
             per_repost: 5.0,
+            per_send: 5.0,
+            per_save: 3.0,
             per_impression: 0.01,
             per_follower_gained: 10.0,
             per_profile_view: 0.5,
@@ -64,6 +71,8 @@ impl ScoringConfig {
             per_reaction: c.per_reaction,
             per_comment: c.per_comment,
             per_repost: c.per_repost,
+            per_send: c.per_send,
+            per_save: c.per_save,
             per_impression: c.per_impression,
             per_follower_gained: c.per_follower_gained,
             per_profile_view: c.per_profile_view,
@@ -180,9 +189,19 @@ async fn score_member(
         let Some(snap) = latest_post_snapshot_before(db, post.id, comp.end_at).await? else {
             continue;
         };
+        // Comments score from the rows we actually read, excluding the author's own — replying to
+        // your own thread shouldn't earn points. When we have no rows at all (nothing read yet),
+        // fall back to LinkedIn's total rather than scoring the post as if it had no comments.
+        let scored_comments = match comments_by_others(db, post.id).await? {
+            Some(n) => n,
+            None => f(snap.comments),
+        };
+
         let points = f(snap.reactions) * cfg.per_reaction
-            + f(snap.comments) * cfg.per_comment
+            + scored_comments * cfg.per_comment
             + f(snap.reposts) * cfg.per_repost
+            + f(snap.sends) * cfg.per_send
+            + f(snap.saves) * cfg.per_save
             + f(snap.impressions) * cfg.per_impression;
 
         let week = (effective - comp.start_at) / WEEK_SECONDS;
@@ -271,6 +290,17 @@ async fn latest_post_snapshot_before(
     snaps.retain(|s| s.captured_at <= before);
     snaps.sort_by_key(|s| s.captured_at);
     Ok(snaps.pop())
+}
+
+/// Comments by anyone other than the post's author, or None when we have read no comments for it.
+async fn comments_by_others(db: &mut Db, post_id: i64) -> toasty::Result<Option<f64>> {
+    let rows = PostComment::filter(PostComment::fields().post_id().eq(post_id))
+        .exec(&mut *db)
+        .await?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(rows.iter().filter(|c| !c.is_self).count() as f64))
 }
 
 fn f(v: Option<i64>) -> f64 {

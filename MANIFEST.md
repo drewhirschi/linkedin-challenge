@@ -31,7 +31,11 @@ a live leaderboard.
 
 - Time window (e.g. "next 3 months"), scored in weekly buckets.
 - **Max posts graded per week** (e.g. 3 — extra posts don't score).
-- **Per-post engagement points:** per reaction, per comment, per repost/share, per impression.
+- **Per-post engagement points:** per reaction, per comment, per repost, per send, per save, per
+  impression. A "send" is a private share — higher intent than a public repost, so it defaults to
+  the same weight.
+- **Only other people's comments score.** We record each comment with its author, so a member
+  replying to their own thread earns nothing.
 - **Normalization:** engagement points are normalized by the participant's follower count, so a
   5k-follower account and a 500-follower account compete fairly (configurable baseline).
 - **Profile-level points:** per follower gained, per profile view during the window.
@@ -133,7 +137,15 @@ and in-browser execution.
   sync of an unchanged photo is a no-op). `Member` gains an avatar field; the current
   `profile_url` is the link to their LinkedIn page, not their picture.
 - `Post` — author, LinkedIn URN, permalink, created_at, text preview.
-- `PostSnapshot` — post, captured_at, impressions, reactions, comments, reposts.
+- `PostSnapshot` — post, captured_at, and the per-post analytics: impressions (plus the
+  in-network / out-of-network split), reactions, comments, reposts, sends, saves, and the
+  downstream effects LinkedIn attributes to the post — profile viewers gained and followers gained.
+  Every metric is optional: a sync that couldn't read one stores nothing rather than a misleading
+  zero.
+- `PostComment` — one row per comment we've read: comment URN, commenter URN and name, and whether
+  the commenter is the post's own author. Upserted by URN, because a comment is a fact that
+  happened once rather than a reading that changes. LinkedIn's own comment *total* stays on the
+  snapshot; these rows are what we actually saw, and scoring uses them.
 - `ProfileSnapshot` — user, captured_at, follower_count, profile_views.
 - Scores are **derived**, computed from snapshots at read time (latest snapshot per post inside
   the window, weekly buckets, top-N posts/week) — no stale denormalized score tables.

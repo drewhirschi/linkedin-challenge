@@ -46,6 +46,14 @@ and the extension can rely on `{ "error": "..." }` regardless of status.
 export interface ApiError {
     error: string;
 }
+export type CommentPayloadCommenterName = string | null;
+export type CommentPayloadCreatedAt = string | null;
+export interface CommentPayload {
+    commenterName?: CommentPayloadCommenterName;
+    commenterUrn: string;
+    createdAt?: CommentPayloadCreatedAt;
+    urn: string;
+}
 export interface CompetitionInfo {
     /** The scoring rules in force — this is what the "how the challenge is configured" screen reads. */
     config: ScoringConfig;
@@ -166,14 +174,26 @@ export interface MemberInfo {
     publicIdentifier?: MemberInfoPublicIdentifier;
 }
 export type MetricsComments = number | null;
+export type MetricsFollowersFromPost = number | null;
 export type MetricsImpressions = number | null;
+export type MetricsImpressionsInNetwork = number | null;
+export type MetricsImpressionsOutOfNetwork = number | null;
+export type MetricsProfileViewersFromPost = number | null;
 export type MetricsReactions = number | null;
 export type MetricsReposts = number | null;
+export type MetricsSaves = number | null;
+export type MetricsSends = number | null;
 export interface Metrics {
     comments?: MetricsComments;
+    followersFromPost?: MetricsFollowersFromPost;
     impressions?: MetricsImpressions;
+    impressionsInNetwork?: MetricsImpressionsInNetwork;
+    impressionsOutOfNetwork?: MetricsImpressionsOutOfNetwork;
+    profileViewersFromPost?: MetricsProfileViewersFromPost;
     reactions?: MetricsReactions;
     reposts?: MetricsReposts;
+    saves?: MetricsSaves;
+    sends?: MetricsSends;
 }
 export interface OrgSummary {
     name: string;
@@ -182,6 +202,9 @@ export interface OrgSummary {
 export type PostPayloadCreatedAt = string | null;
 export type PostPayloadTextPreview = string | null;
 export interface PostPayload {
+    /** Comments the extension could read, with their authors. Absent or empty simply means we
+  didn't read any this time — it is not a claim that the post has none. */
+    comments?: CommentPayload[];
     createdAt?: PostPayloadCreatedAt;
     metrics: Metrics;
     permalink: string;
@@ -190,16 +213,26 @@ export interface PostPayload {
 }
 export type PostStatTextPreview = string | null;
 export interface PostStat {
+    /** LinkedIn's total comment count. */
     comments: number;
+    /** Comments by people other than the author — what actually scores. Equals `comments` until
+  we have read the comment list for this post. */
+    commentsByOthers: number;
+    followersFromPost: number;
     id: number;
     impressions: number;
+    impressionsInNetwork: number;
+    impressionsOutOfNetwork: number;
     /** False when the post falls outside the competition window. */
     inWindow: boolean;
     permalink: string;
     /** Post creation time, or the first snapshot's time when LinkedIn didn't give us one. */
     postedAt: number;
+    profileViewersFromPost: number;
     reactions: number;
     reposts: number;
+    saves: number;
+    sends: number;
     textPreview?: PostStatTextPreview;
     urn: string;
 }
@@ -227,6 +260,9 @@ export interface ScoringConfig {
     perProfileView: number;
     perReaction: number;
     perRepost: number;
+    perSave: number;
+    /** A "send" is a private share — high intent, so usually worth more than a public repost. */
+    perSend: number;
 }
 export interface SessionDeviceRequest {
     /** Value of the `session` cookie for this server. */

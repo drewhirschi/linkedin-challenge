@@ -19,7 +19,14 @@ function Rules({ config }: { config: ScoringConfig }) {
         <dt>Each post earns</dt>
         <dd>
           {fmtRate(config.perReaction)} per reaction · {fmtRate(config.perComment)} per comment ·{" "}
-          {fmtRate(config.perRepost)} per repost · {fmtRate(config.perImpression)} per impression.
+          {fmtRate(config.perRepost)} per repost · {fmtRate(config.perSend)} per send ·{" "}
+          {fmtRate(config.perSave)} per save · {fmtRate(config.perImpression)} per impression.
+        </dd>
+
+        <dt>Only other people&rsquo;s comments count</dt>
+        <dd>
+          Comments you leave on your own posts are excluded, so replying to your own thread
+          doesn&rsquo;t earn points.
         </dd>
 
         <dt>Your profile earns</dt>

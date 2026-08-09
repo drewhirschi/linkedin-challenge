@@ -102,6 +102,8 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
         per_reaction: cfg.per_reaction,
         per_comment: cfg.per_comment,
         per_repost: cfg.per_repost,
+        per_send: cfg.per_send,
+        per_save: cfg.per_save,
         per_impression: cfg.per_impression,
         per_follower_gained: cfg.per_follower_gained,
         per_profile_view: cfg.per_profile_view,
