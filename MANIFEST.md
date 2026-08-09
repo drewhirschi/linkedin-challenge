@@ -184,5 +184,6 @@ and in-browser execution.
 server/     Topcoat app (Rust)
 extension/  Chrome extension (MV3, plain JS)
 .reference/ cloned topcoat repo (git-ignored, for learning the framework)
-docs/       research notes (LinkedIn API surface, scraping notes)
+docs/       research notes (LinkedIn API surface, scraping notes) and the deployment and
+            extension-distribution guides
 ```

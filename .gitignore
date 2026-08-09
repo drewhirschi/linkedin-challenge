@@ -13,3 +13,6 @@ dist/
 
 # Playwright MCP scratch output from browser testing.
 .playwright-mcp/
+
+# Built extension packages.
+extension/dist/
