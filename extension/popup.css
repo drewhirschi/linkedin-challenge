@@ -60,3 +60,15 @@ button {
   :root { --bg:#1b1f23; --fg:#e8eaed; --muted:#9aa7b2; --line:#333a40; }
   .ghost:hover { background:#252a2e; }
 }
+
+/* Preflight checklist: two prerequisites, each with its own fix. */
+.checks { list-style: none; margin: 10px 0 14px; padding: 0; }
+.checks li { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+.checks .mark { width: 16px; text-align: center; }
+.checks li.ok .mark { color: #057a55; }
+.checks li.bad .mark { color: #b42318; }
+.checks li.bad .label { color: #b42318; }
+.linkish {
+  background: none; border: 0; padding: 0; margin-left: auto;
+  color: #0a66c2; cursor: pointer; font-size: 12px; text-decoration: underline; width: auto;
+}

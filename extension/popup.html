@@ -17,14 +17,16 @@
 
     <!-- Unlinked: reuse the website session, or send the user there to sign in -->
     <section id="link-view" hidden>
-      <p class="lede">
-        Connect this browser to your challenge account. If you're already signed in on the site,
-        this takes one click.
-      </p>
+      <p class="lede">Connect this browser to your challenge account.</p>
+      <!-- Both sessions are prerequisites and fail for different reasons, so each gets its own
+           line with its own fix rather than one vague "not ready". -->
+      <ul class="checks">
+        <li id="check-app"><span class="mark">…</span> <span class="label">Signed in to the challenge</span>
+          <button class="linkish" id="fix-app" hidden>Sign in</button></li>
+        <li id="check-li"><span class="mark">…</span> <span class="label">Signed in to LinkedIn</span>
+          <button class="linkish" id="fix-li" hidden>Open LinkedIn</button></li>
+      </ul>
       <button id="link-btn" class="primary">Connect</button>
-      <p class="note">
-        Not signed in? We'll open the sign-in page for you — come back and press Connect again.
-      </p>
       <p class="note">
         This reads only your own LinkedIn stats (followers, your posts, your post analytics) from
         the session already open in this browser. It never sees your LinkedIn password and never

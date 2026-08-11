@@ -242,6 +242,20 @@ function dedupeByUrn(posts) {
   return out;
 }
 
+/// Whether this browser has a LinkedIn session, without spending a request on it.
+///
+/// Presence of JSESSIONID is what every Voyager call depends on: it is both the session marker and
+/// the source of the CSRF token. A cheap check is the right one here — the popup wants to tell you
+/// what to fix before you click, not prove the session is still valid.
+export async function isLinkedInSignedIn() {
+  try {
+    const cookie = await chrome.cookies.get({ url: LINKEDIN_ORIGIN, name: "JSESSIONID" });
+    return Boolean(cookie?.value);
+  } catch {
+    return false;
+  }
+}
+
 // ---- diagnostics ----------------------------------------------------------
 
 // Report the SHAPE of the live Voyager responses so the parsers above can be fixed against real

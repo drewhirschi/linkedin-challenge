@@ -5,3 +5,5 @@
 /client/external-src
 /client/external-dist
 .env
+.vercel
+.env*

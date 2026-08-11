@@ -11,6 +11,11 @@ import { bearer, installApiBaseUrl, linkIdentity, pushSync, signInDeviceWithSess
 
 installApiBaseUrl();
 
+/** Whether the browser holds a challenge-app session for the configured server. */
+export async function isAppSignedIn() {
+  return Boolean(await readSessionCookie());
+}
+
 /** The website session cookie for our server, or null when the user isn't signed in there. */
 export async function readSessionCookie() {
   const cookie = await chrome.cookies.get({ url: SERVER_URL, name: SESSION_COOKIE });

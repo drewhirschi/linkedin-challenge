@@ -1,9 +1,9 @@
 // MV3 service worker: schedules periodic scrapes, runs them, and answers popup messages.
 import { SYNC_PERIOD_MINUTES, SYNC_JITTER_MINUTES, MIN_SYNC_INTERVAL_MINUTES } from "./config.js";
 import { getState, setState, isLinked, clearLink } from "./storage.js";
-import { collectSnapshot, getMe, diagnose } from "./linkedin.js";
-import { linkIdentityToAccount, pushSnapshot, signInFromSession } from "./sync.js";
-import { SERVER_URL } from "./config.js";
+import { collectSnapshot, getMe, diagnose, isLinkedInSignedIn } from "./linkedin.js";
+import { isAppSignedIn, linkIdentityToAccount, pushSnapshot, signInFromSession } from "./sync.js";
+import { SERVER_URL, LINKEDIN_ORIGIN } from "./config.js";
 
 const ALARM = "challenge-sync";
 
@@ -88,9 +88,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case "LINK": {
           // Reuse the website session rather than asking for a password again. No session means
           // the user simply isn't signed in yet — open the site and let them.
+          if (!(await isLinkedInSignedIn())) {
+            await chrome.tabs.create({ url: LINKEDIN_ORIGIN });
+            sendResponse({ ok: false, needsLinkedIn: true });
+            break;
+          }
           const account = await signInFromSession();
           if (!account) {
-            await chrome.tabs.create({ url: `${SERVER_URL}/login` });
+            await chrome.tabs.create({ url: `${SERVER_URL}/auth/login` });
             sendResponse({ ok: false, needsSignIn: true });
             break;
           }
@@ -110,6 +115,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sendResponse({ ok: true, data });
           break;
         }
+        case "PREFLIGHT": {
+          // Both sessions are required, and they fail for different reasons with different fixes,
+          // so report them separately rather than as one "not ready".
+          const [app, linkedIn] = await Promise.all([isAppSignedIn(), isLinkedInSignedIn()]);
+          sendResponse({ ok: true, appSignedIn: app, linkedInSignedIn: linkedIn, serverUrl: SERVER_URL });
+          break;
+        }
+        case "OPEN_LINKEDIN":
+          await chrome.tabs.create({ url: LINKEDIN_ORIGIN });
+          sendResponse({ ok: true });
+          break;
         case "SYNC_DUE_IN":
           sendResponse({ ok: true, ms: await msUntilSyncAllowed() });
           break;
@@ -121,7 +137,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         }
         case "OPEN_SIGN_IN":
-          await chrome.tabs.create({ url: `${SERVER_URL}/login` });
+          await chrome.tabs.create({ url: `${SERVER_URL}/auth/login` });
           sendResponse({ ok: true });
           break;
         case "SYNC_NOW":

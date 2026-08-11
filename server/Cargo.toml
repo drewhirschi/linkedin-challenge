@@ -28,8 +28,11 @@ nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "e0cb679", f
 nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "e0cb679", features = [
     "vercel",
 ] }
-# Toasty with the `turso` driver = libsql. Local file now (`turso:linkedin.db`), hosted Turso later.
-toasty = { version = "0.7", features = ["turso"] }
+# Two drivers, chosen at runtime by the DATABASE_URL scheme: `turso:` (a local file) for
+# development, `postgres:` for deployment. Toasty's turso driver is local-file only — it cannot
+# reach hosted Turso — and a file database on a serverless function loses writes silently, so
+# production needs a real server. Keeping both means dev keeps its zero-setup file.
+toasty = { version = "0.7", features = ["turso", "postgresql"] }
 axum = "0.8"
 http = "1"
 tower = "0.5"
