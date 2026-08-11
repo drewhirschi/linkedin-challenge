@@ -4,16 +4,28 @@ The scaffold ships a working Vercel path — `vercel.json`, `api/index.rs`, and
 `scripts/deploy-prebuilt.sh`. What it does **not** ship is a database that survives a serverless
 invocation, and that is the decision to make before anything else.
 
+## Current deployment
+
+| | |
+|---|---|
+| URL | https://linkedin-challenge-ruby.vercel.app |
+| Database | Neon Postgres (`neon-charcoal-zebra`), provisioned through the Vercel integration |
+| Protection | SSO off — the app is public, and authenticates its own users |
+| Seeding | `SEED_DEMO` unset, so no demo org exists in production |
+
 ## Read this first: the database is not solved
 
 The app currently uses Toasty's `turso` driver against a local file (`turso:linkedin.db`). Two
 things follow, and neither is obvious:
 
-**Toasty 0.7's Turso driver is local-only.** `Turso::new(url)` accepts `turso::memory:` or
-`turso:/path/to/file` and nothing else — there is no remote URL, no auth token, no replica sync. The
-note in this repo that hosted Turso is "a connection-string change" is **wrong for this driver
-version**; I checked the source. Pointing `DATABASE_URL` at a `libsql://…turso.io` URL will fail to
-parse, not connect.
+**Toasty's Turso driver is local-only, at every published version.** Confirmed against 0.9.0, not
+just the 0.7.0 we pin. `Turso::new(url)` accepts `turso::memory:` or `turso:/path/to/file` and nothing
+else — no remote URL, no auth token, no replica sync. Pointing `DATABASE_URL` at a
+`libsql://…turso.io` URL fails to parse rather than failing to connect.
+
+The capability exists one layer down: the underlying `turso` crate ships a `sync` feature and a
+sync engine, already in our dependency tree. Toasty simply does not surface it. Hosted Turso is
+therefore a Toasty driver change, not a Turso limitation — worth knowing if it becomes a priority.
 
 **A file-backed database cannot work on Vercel anyway.** Functions get an ephemeral filesystem and
 run as many concurrent instances as traffic demands. Each would open its own copy, writes would land
@@ -24,7 +36,7 @@ So pick one:
 
 | Option | What changes | Trade-off |
 |---|---|---|
-| **Postgres on Vercel** (Neon, Supabase, Vercel Postgres) | `toasty` feature `turso` → `postgresql`; `DATABASE_URL` becomes a `postgres://` URL | The paved road for serverless. Toasty supports it today. Costs a schema recreation. |
+| **Postgres on Vercel** (Neon, Supabase, Vercel Postgres) — **chosen** | Enable the `postgresql` feature alongside `turso`; Toasty picks the driver from the `DATABASE_URL` scheme, so local dev keeps its file | The paved road for serverless. No code change beyond the feature flag. |
 | **A host with a real disk** (Fly.io + volume, a small VM, Docker) | Keep the Turso file driver; mount a volume | No database migration, but you leave the one-command Vercel deploy behind. |
 | **Wait for remote Turso** | Nothing yet | Only sensible if hosted Turso specifically is the goal. Track the driver's support. |
 
@@ -72,12 +84,22 @@ produced.
 a model change, `sync-schema.sh` adds missing tables in place; anything else needs a hand-written
 migration.
 
+## The trap that cost the first deploy
+
+The Rust compiles, then the build fails with `Cannot read properties of undefined (reading 'target')`.
+`vercel-rust` reads `config.build.target` out of `.cargo/config.toml` with an optional chain that
+guards the *file* being absent but not the *table* being missing. A `.cargo/config.toml` that only
+declares an alias — which is exactly what `create-nextrs-app` generates — crashes it.
+
+The fix is an empty `[build]` table, which is already in ours. nextrs's own site and the react-todos
+example both carry one with a comment explaining this; only the scaffold omits it.
+
 ## Verifying a deploy
 
 ```sh
-curl -sS https://<your-deployment>/api/health          # {"ok":true} — no database involved
-curl -sS -o /dev/null -w '%{http_code}\n' https://<your-deployment>/auth/login   # 200
-curl -sS -o /dev/null -w '%{http_code}\n' https://<your-deployment>/             # 303 to /auth/login
+curl -sS https://linkedin-challenge-ruby.vercel.app/api/health   # {"ok":true} — no database involved
+curl -sS -o /dev/null -w '%{http_code}\n' https://linkedin-challenge-ruby.vercel.app/auth/login  # 200
+curl -sS -o /dev/null -w '%{http_code}\n' https://linkedin-challenge-ruby.vercel.app/            # 303
 ```
 
 `/api/health` deliberately touches no database, so it separates "the function is alive" from "the

@@ -1,2 +1,10 @@
 [alias]
-dev = "nextrs-dev --bin server"
+dev = "nextrs-dev --bin linkedin-challenge-server"
+
+# Empty, but required for deployment. The vercel-rust builder reads
+# `config.build.target` from this file with an optional chain that guards the
+# file being absent but not the table being missing, so a .cargo/config.toml
+# without a [build] table crashes the build with the unhelpful
+# "Cannot read properties of undefined (reading 'target')" — after the Rust
+# compile has already succeeded. Empty means "host target", which is what we want.
+[build]
