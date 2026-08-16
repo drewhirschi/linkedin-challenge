@@ -1,8 +1,9 @@
 // One participant's posts, grouped into the same weekly buckets the scoring uses, with the full
 // per-post analytics we hold. Doubles as "my personal standing" — same data, same page; the only
 // difference is whether you arrived here by clicking yourself.
-import { useGetMemberDetail, fmtInt, fmtNum, fmtDate, initials } from "@server/client";
-import type { PostStat, WeekGroup } from "@server/client";
+import { useGetMemberDetail } from "@linkedin-challenge/client/react-query";
+import type { PostStat, WeekGroup } from "@linkedin-challenge/client";
+import { fmtInt, fmtNum, fmtDate, initials } from "../../../../../../../components/format";
 
 function Metric({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (

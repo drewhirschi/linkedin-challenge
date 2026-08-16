@@ -1,7 +1,8 @@
 // An org's competitions. This page used to BE the leaderboard, silently picking whichever
 // competition looked active; now that an org can run several, it lists them and each has its own
 // board.
-import { useGetOrg, fmtInt, fmtDate } from "@server/client";
+import { useGetOrg } from "@linkedin-challenge/client/react-query";
+import { fmtInt, fmtDate } from "../../../components/format";
 
 export default function OrgPage({ params }: { params: { slug: string } }) {
   const { slug } = params;

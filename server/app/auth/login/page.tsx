@@ -1,4 +1,4 @@
-import { useLogin } from "@server/client";
+import { useLogin } from "@linkedin-challenge/client/react-query";
 import { useState } from "react";
 
 export default function Login() {

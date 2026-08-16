@@ -1,13 +1,10 @@
+// The single TypeScript project for this app. It lives at the app root so an editor opening
+// app/**/page.tsx finds it — editors resolve a file against the nearest tsconfig ABOVE it.
+//
+// It covers only application sources. The generated client is a separate package under
+// .nextrs/client with its own tsconfig; pages resolve it as `@linkedin-challenge/client` through
+// the root workspace link (node_modules), exactly as any other dependency.
 {
-  // The single TypeScript project for this app. It lives at the app root so an editor opening
-  // app/**/page.tsx finds it — editors resolve a file against the nearest tsconfig ABOVE it, and a
-  // config that only lives in client/ is never consulted, leaving every page with an unresolvable
-  // "@server/client" and implicit `any` on every callback parameter.
-  //
-  // One project covers both app/ and client/src so the pages and the generated client are checked
-  // against each other. No typeRoots: client/node_modules is symlinked at this root, so ordinary
-  // module resolution finds the ambient types, and pinning typeRoots would only narrow what it can
-  // see.
   "compilerOptions": {
     "target": "ES2020",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
@@ -18,17 +15,12 @@
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    // The bundler resolves this alias out of client/node_modules at build time; this entry is for
-    // the type-checker and the editor.
-    "paths": {
-      "@server/client": ["./client/src/index.ts"]
-    }
+    "forceConsistentCasingInFileNames": true
   },
   "include": [
     "app/**/*.ts",
     "app/**/*.tsx",
-    "client/src/**/*.ts",
-    "client/orval.config.ts"
+    "components/**/*.ts",
+    "components/**/*.tsx"
   ]
 }

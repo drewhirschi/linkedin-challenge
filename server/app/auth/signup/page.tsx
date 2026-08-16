@@ -1,4 +1,4 @@
-import { useSignup } from "@server/client";
+import { useSignup } from "@linkedin-challenge/client/react-query";
 import { useState } from "react";
 
 export default function Signup() {

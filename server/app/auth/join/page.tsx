@@ -1,6 +1,6 @@
 // Participant sign-up: redeem an invite code into a real account. Everyone signs in to see
 // anything, so this is where a participant gets the credentials they use on the web AND in the extension.
-import { useJoinWithInvite } from "@server/client";
+import { useJoinWithInvite } from "@linkedin-challenge/client/react-query";
 import { useState } from "react";
 
 export default function Join() {

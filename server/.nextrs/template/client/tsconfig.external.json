@@ -1,0 +1,17 @@
+// The extension's React-free client is a separate emit from the package's own dist/: single-file,
+// no React or TanStack peer types, built against an absolute origin. Kept beside the generated
+// package so `nextrs client generate` can run both builds from one directory.
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "outDir": "./external-dist",
+    "rootDir": "./external-src"
+  },
+  "include": ["external-src/**/*.ts"]
+}

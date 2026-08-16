@@ -15,17 +15,17 @@ name = "index"
 path = "api/index.rs"
 
 [[bin]]
-name = "dump-openapi"
-path = "src/bin/dump-openapi.rs"
+name = "linkedin-challenge-server-dump-openapi"
+path = ".nextrs/dump-openapi.rs"
 
 [build-dependencies]
-nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "e0cb679", features = [
+nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "89671e0", features = [
     "build",
     "tsx",
 ] }
 
 [dependencies]
-nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "e0cb679", features = [
+nextrs = { git = "https://github.com/drewhirschi/nextrs.git", rev = "89671e0", features = [
     "vercel",
 ] }
 # Two drivers, chosen at runtime by the DATABASE_URL scheme: `turso:` (a local file) for

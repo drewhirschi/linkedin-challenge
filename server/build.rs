@@ -8,8 +8,9 @@ fn main() {
 
     nextrs::bundle::bundle_pages(&nextrs::bundle::BundleConfig {
         app_dir: "app",
-        client_dir: "client",
-        client_alias: "@server/client",
+        project_dir: Some("."),
+        client_dir: ".nextrs/client",
+        client_alias: "@linkedin-challenge/client",
         public_dist: "public/dist",
         ..Default::default()
     })

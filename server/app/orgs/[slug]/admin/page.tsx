@@ -1,13 +1,8 @@
 // Admin dashboard: org-wide aggregate progress, competition creation with the full scoring
 // configuration, and invite management.
-import {
-  useGetAdminOverview,
-  useCreateCompetition,
-  useCreateInvites,
-  getGetAdminOverviewQueryKey,
-  fmtDate,
-} from "@server/client";
-import type { ScoringConfig } from "@server/client";
+import { useGetAdminOverview, useCreateCompetition, useCreateInvites, getGetAdminOverviewQueryKey } from "@linkedin-challenge/client/react-query";
+import type { ScoringConfig } from "@linkedin-challenge/client";
+import { fmtDate } from "../../../../components/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 

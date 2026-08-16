@@ -1,9 +1,10 @@
 /target
 /public/dist
 /node_modules
-/client/node_modules
-/client/external-src
-/client/external-dist
+# The generated client package and the OpenAPI document it is built from are build products;
+# `.nextrs/template/` and `.nextrs/ensure-client.mjs` are the tracked sources they come from.
+/.nextrs/client/
+/.nextrs/openapi.json
 .env
 .vercel
 .env*

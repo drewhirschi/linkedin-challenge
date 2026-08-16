@@ -1,16 +1,8 @@
 // Public leaderboard for an org's active competition, plus a plain-language explanation of the
 // scoring rules in force — so participants can see how points are earned rather than guess.
-import {
-  useGetCompetitionLeaderboard,
-  useGetCompetitionAggregate,
-  useGetMe,
-  fmtInt,
-  fmtNum,
-  fmtRate,
-  fmtDate,
-  initials,
-} from "@server/client";
-import type { ScoringConfig } from "@server/client";
+import { useGetCompetitionLeaderboard, useGetCompetitionAggregate, useGetMe } from "@linkedin-challenge/client/react-query";
+import type { ScoringConfig } from "@linkedin-challenge/client";
+import { fmtInt, fmtNum, fmtRate, fmtDate, initials } from "../../../../../components/format";
 
 // The extra numbers an organiser wants while looking at a board — shown inline rather than on a
 // separate admin screen, because "how is this competition doing" is the same question the board

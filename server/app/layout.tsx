@@ -1,7 +1,7 @@
 // Root layout — the chrome that stays mounted across soft navigations. Plain <a> links let
 // TanStack Router swap only the page leaf, so the React Query cache survives navigation.
 import type { ReactNode } from "react";
-import { useGetMe, useLogout } from "@server/client";
+import { useGetMe, useLogout } from "@linkedin-challenge/client/react-query";
 
 function Nav() {
   // Unseeded on purpose: session state is per-viewer, so seeding it into the streamed HTML would

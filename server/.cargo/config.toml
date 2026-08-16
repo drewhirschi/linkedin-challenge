@@ -1,5 +1,7 @@
+# Keep the short `cargo dev` workflow while routing it through the unified CLI.
+# One `cargo install cargo-nextrs` provides the `nextrs` executable.
 [alias]
-dev = "nextrs-dev --bin linkedin-challenge-server"
+dev = "nextrs dev --bin linkedin-challenge-server"
 
 # Empty, but required for deployment. The vercel-rust builder reads
 # `config.build.target` from this file with an optional chain that guards the

@@ -1,6 +1,7 @@
 // Home: the competitions you're in, and where you stand in each. Scoped to the viewer rather than
 // listing every org, because "what am I competing in" is the question someone signing in has.
-import { useGetMyCompetitions, useGetMe, fmtInt, fmtNum, fmtDate } from "@server/client";
+import { useGetMyCompetitions, useGetMe } from "@linkedin-challenge/client/react-query";
+import { fmtInt, fmtNum, fmtDate } from "../components/format";
 
 export default function Home() {
   const { data, isLoading } = useGetMyCompetitions();
