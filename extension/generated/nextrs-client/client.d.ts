@@ -91,6 +91,9 @@ export interface CreateInvitesRequest {
 export interface CreateInvitesResponse {
     codes: string[];
 }
+export interface Health {
+    ok: boolean;
+}
 export interface InviteRow {
     code: string;
     createdAt: number;
@@ -353,6 +356,12 @@ export interface WeekGroup {
     /** 0-based week index from the competition start. */
     week: number;
 }
+export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
+export type HTTPStatusCode2xx = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207;
+export type HTTPStatusCode3xx = 300 | 301 | 302 | 303 | 304 | 305 | 307 | 308;
+export type HTTPStatusCode4xx = 400 | 401 | 402 | 403 | 404 | 405 | 406 | 407 | 408 | 409 | 410 | 411 | 412 | 413 | 414 | 415 | 416 | 417 | 418 | 419 | 420 | 421 | 422 | 423 | 424 | 426 | 428 | 429 | 431 | 451;
+export type HTTPStatusCode5xx = 500 | 501 | 502 | 503 | 504 | 505 | 507 | 511;
+export type HTTPStatusCodes = HTTPStatusCode1xx | HTTPStatusCode2xx | HTTPStatusCode3xx | HTTPStatusCode4xx | HTTPStatusCode5xx;
 export type signInDeviceWithSessionResponse200 = {
     data: SessionDeviceResponse;
     status: 200;
@@ -412,6 +421,9 @@ export type loginResponseError = (loginResponse401) & {
 export type loginResponse = (loginResponseSuccess | loginResponseError);
 export declare const getLoginUrl: () => string;
 export declare const login: (loginRequest: LoginRequest, options?: RequestInit) => Promise<loginResponse>;
+/**
+ * @summary Sign out
+ */
 export type logoutResponse200 = {
     data: LogoutResponse;
     status: 200;
@@ -426,10 +438,17 @@ export type getMeResponse200 = {
     data: MeResponse;
     status: 200;
 };
+export type getMeResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
 export type getMeResponseSuccess = (getMeResponse200) & {
     headers: Headers;
 };
-export type getMeResponse = (getMeResponseSuccess);
+export type getMeResponseError = (getMeResponseDefault) & {
+    headers: Headers;
+};
+export type getMeResponse = (getMeResponseSuccess | getMeResponseError);
 export declare const getGetMeUrl: () => string;
 export declare const getMe: (options?: RequestInit) => Promise<getMeResponse>;
 export type signupResponse200 = {
@@ -453,6 +472,19 @@ export type signupResponseError = (signupResponse400 | signupResponse409) & {
 export type signupResponse = (signupResponseSuccess | signupResponseError);
 export declare const getSignupUrl: () => string;
 export declare const signup: (signupRequest: SignupRequest, options?: RequestInit) => Promise<signupResponse>;
+/**
+ * @summary Liveness probe
+ */
+export type healthResponse200 = {
+    data: Health;
+    status: 200;
+};
+export type healthResponseSuccess = (healthResponse200) & {
+    headers: Headers;
+};
+export type healthResponse = (healthResponseSuccess);
+export declare const getHealthUrl: () => string;
+export declare const health: (options?: RequestInit) => Promise<healthResponse>;
 export type linkIdentityResponse200 = {
     data: LinkResponse;
     status: 200;
@@ -491,14 +523,24 @@ export type getMyCompetitionsResponseError = (getMyCompetitionsResponse401) & {
 export type getMyCompetitionsResponse = (getMyCompetitionsResponseSuccess | getMyCompetitionsResponseError);
 export declare const getGetMyCompetitionsUrl: () => string;
 export declare const getMyCompetitions: (options?: RequestInit) => Promise<getMyCompetitionsResponse>;
+/**
+ * @summary Organizations
+ */
 export type listOrgsResponse200 = {
     data: OrgSummary[];
     status: 200;
 };
+export type listOrgsResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
 export type listOrgsResponseSuccess = (listOrgsResponse200) & {
     headers: Headers;
 };
-export type listOrgsResponse = (listOrgsResponseSuccess);
+export type listOrgsResponseError = (listOrgsResponseDefault) & {
+    headers: Headers;
+};
+export type listOrgsResponse = (listOrgsResponseSuccess | listOrgsResponseError);
 export declare const getListOrgsUrl: () => string;
 export declare const listOrgs: (options?: RequestInit) => Promise<listOrgsResponse>;
 export type getOrgResponse200 = {

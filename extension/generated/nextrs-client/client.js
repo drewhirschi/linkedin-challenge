@@ -53,7 +53,6 @@ export const logout = async (options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
-;
 export const getGetMeUrl = () => {
     return `/api/auth/me`;
 };
@@ -75,6 +74,19 @@ export const signup = async (signupRequest, options) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
         body: JSON.stringify(signupRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+;
+export const getHealthUrl = () => {
+    return `/api/health`;
+};
+export const health = async (options) => {
+    const res = await fetch(getHealthUrl(), {
+        ...options,
+        method: 'GET'
     });
     const body = [204, 205, 304].includes(res.status) ? null : await res.text();
     const data = body ? JSON.parse(body) : {};
@@ -106,7 +118,6 @@ export const getMyCompetitions = async (options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
-;
 export const getListOrgsUrl = () => {
     return `/api/orgs`;
 };
