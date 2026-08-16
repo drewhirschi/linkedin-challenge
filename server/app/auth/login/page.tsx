@@ -25,7 +25,7 @@ export default function Login() {
                     // Hard load: the session cookie is new, so every cached query is stale.
                     // Everyone lands on their org's leaderboard; admins get the dashboard link
                     // in the nav rather than a different destination.
-                    window.location.href = res.data.orgSlug ? `/orgs/${res.data.orgSlug}` : "/";
+                    window.location.href = "/";
                   } else {
                     setError("Invalid email or password.");
                   }

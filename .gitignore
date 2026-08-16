@@ -16,3 +16,4 @@ dist/
 
 # Built extension packages.
 extension/dist/
+.gstack/

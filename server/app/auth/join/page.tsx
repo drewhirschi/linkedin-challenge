@@ -22,7 +22,7 @@ export default function Join() {
           with the email and password you just chose.
         </div>
         <p>
-          <a className="btn" href={`/orgs/${joined.slug}`}>
+          <a className="btn" href="/">
             Go to the leaderboard
           </a>
         </p>

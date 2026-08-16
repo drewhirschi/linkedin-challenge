@@ -46,6 +46,15 @@ and the extension can rely on `{ "error": "..." }` regardless of status.
 export interface ApiError {
     error: string;
 }
+export type ChallengeListCurrent = null | CompetitionInfo;
+/**
+ * The org's challenges, newest first, with the one the app shows by default.
+ */
+export interface ChallengeList {
+    challenges: CompetitionInfo[];
+    current?: ChallengeListCurrent;
+    org: OrgSummary;
+}
 export type CommentPayloadCommenterName = string | null;
 export type CommentPayloadCreatedAt = string | null;
 export interface CommentPayload {
@@ -63,7 +72,7 @@ export interface CompetitionInfo {
     name: string;
     startAt: number;
 }
-export interface CreateCompetitionRequest {
+export interface CreateChallengeRequest {
     config: ScoringConfig;
     /** `YYYY-MM-DD`, inclusive through end of day. */
     end: string;
@@ -71,7 +80,7 @@ export interface CreateCompetitionRequest {
     /** `YYYY-MM-DD`. */
     start: string;
 }
-export interface CreateCompetitionResponse {
+export interface CreateChallengeResponse {
     id: number;
 }
 /**
@@ -92,6 +101,13 @@ export interface CreateInvitesResponse {
     codes: string[];
 }
 export interface Health {
+    ok: boolean;
+}
+export interface ImpersonateRequest {
+    memberId: number;
+}
+export interface ImpersonateResponse {
+    displayName: string;
     ok: boolean;
 }
 export interface InviteRow {
@@ -118,10 +134,12 @@ export interface JoinResponse {
 export type LeaderboardAggregate = null | Aggregate;
 export type LeaderboardCompetition = null | CompetitionInfo;
 /**
- * The public leaderboard payload: standings, the competition, and the rules behind the numbers.
+ * The leaderboard payload: standings, the challenge, and the rules behind the numbers.
  */
 export interface Leaderboard {
     aggregate?: LeaderboardAggregate;
+    /** The org's other challenges, for the board's switcher. */
+    challenges: CompetitionInfo[];
     competition?: LeaderboardCompetition;
     org: OrgSummary;
     standings: StandingRow[];
@@ -143,13 +161,23 @@ export interface LogoutResponse {
     ok: boolean;
 }
 export type MeResponseDisplayName = string | null;
+/**
+ * The system admin really driving this session, when it is an impersonation.
+ */
+export type MeResponseImpersonatedBy = string | null;
 export type MeResponseMemberId = number | null;
+export type MeResponseOrgName = string | null;
 export type MeResponseOrgSlug = string | null;
 export interface MeResponse {
     displayName?: MeResponseDisplayName;
-    /** Whether this member administers their org — the dashboard is the only thing it unlocks. */
+    /** The system admin really driving this session, when it is an impersonation. */
+    impersonatedBy?: MeResponseImpersonatedBy;
+    /** Whether this member administers their org — unlocks the Admin section. */
     isAdmin: boolean;
+    /** Whether this member operates the product — unlocks the System panel. */
+    isSystemAdmin: boolean;
     memberId?: MeResponseMemberId;
+    orgName?: MeResponseOrgName;
     orgSlug?: MeResponseOrgSlug;
     signedIn: boolean;
 }
@@ -199,26 +227,6 @@ export interface Metrics {
     reposts?: MetricsReposts;
     saves?: MetricsSaves;
     sends?: MetricsSends;
-}
-export type MyCompetitionStanding = null | StandingRow;
-/**
- * One competition a member has entered, plus where they stand in it — the home page's row.
- */
-export interface MyCompetition {
-    competition: CompetitionInfo;
-    /** @minimum 0 */
-    entrants: number;
-    org: OrgSummary;
-    standing?: MyCompetitionStanding;
-}
-/**
- * An org and the competitions it runs.
- */
-export interface OrgDetail {
-    competitions: CompetitionInfo[];
-    /** Entrant count per competition, index-aligned with `competitions`. */
-    entrantCounts: number[];
-    org: OrgSummary;
 }
 export interface OrgSummary {
     name: string;
@@ -333,6 +341,10 @@ export interface StandingRow {
     /** @minimum 0 */
     totalPosts: number;
 }
+export interface StopImpersonationResponse {
+    displayName: string;
+    ok: boolean;
+}
 export type SyncRequestCapturedAt = string | null;
 export interface SyncRequest {
     capturedAt?: SyncRequestCapturedAt;
@@ -345,6 +357,39 @@ export interface SyncResponse {
     /** @minimum 0 */
     postsIngested: number;
 }
+export type SystemMemberRowEmail = string | null;
+/**
+ * Unix seconds of the newest profile snapshot — a proxy for "is the extension syncing".
+ */
+export type SystemMemberRowLastSyncedAt = number | null;
+/**
+ * One member as the system panel sees them — enough to pick an impersonation target.
+ */
+export interface SystemMemberRow {
+    createdAt: number;
+    displayName: string;
+    email?: SystemMemberRowEmail;
+    id: number;
+    isAdmin: boolean;
+    isSystemAdmin: boolean;
+    /** Unix seconds of the newest profile snapshot — a proxy for "is the extension syncing". */
+    lastSyncedAt?: SystemMemberRowLastSyncedAt;
+}
+export type SystemOrgRowActiveChallenge = string | null;
+/**
+ * One org and everyone in it.
+ */
+export interface SystemOrgRow {
+    activeChallenge?: SystemOrgRowActiveChallenge;
+    createdAt: number;
+    id: number;
+    members: SystemMemberRow[];
+    name: string;
+    slug: string;
+}
+export interface SystemOverview {
+    orgs: SystemOrgRow[];
+}
 /**
  * Posts bucketed by the same weekly buckets the scoring uses, so the grouping matches how
 points were actually earned.
@@ -356,12 +401,99 @@ export interface WeekGroup {
     /** 0-based week index from the competition start. */
     week: number;
 }
+export type GetChallengeAggregateParams = {
+    challengeId: number;
+};
+export type GetLeaderboardParams = {
+    /**
+     * A specific challenge to rank; omitted means the org's current one.
+     */
+    challengeId?: number | null;
+};
+export type GetMemberDetailParams = {
+    /**
+     * The challenge window to bucket posts into; omitted means the org's current one.
+     */
+    challengeId?: number | null;
+};
 export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
 export type HTTPStatusCode2xx = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207;
 export type HTTPStatusCode3xx = 300 | 301 | 302 | 303 | 304 | 305 | 307 | 308;
 export type HTTPStatusCode4xx = 400 | 401 | 402 | 403 | 404 | 405 | 406 | 407 | 408 | 409 | 410 | 411 | 412 | 413 | 414 | 415 | 416 | 417 | 418 | 419 | 420 | 421 | 422 | 423 | 424 | 426 | 428 | 429 | 431 | 451;
 export type HTTPStatusCode5xx = 500 | 501 | 502 | 503 | 504 | 505 | 507 | 511;
 export type HTTPStatusCodes = HTTPStatusCode1xx | HTTPStatusCode2xx | HTTPStatusCode3xx | HTTPStatusCode4xx | HTTPStatusCode5xx;
+export type getChallengeAggregateResponse200 = {
+    data: Aggregate;
+    status: 200;
+};
+export type getChallengeAggregateResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getChallengeAggregateResponseSuccess = (getChallengeAggregateResponse200) & {
+    headers: Headers;
+};
+export type getChallengeAggregateResponseError = (getChallengeAggregateResponseDefault) & {
+    headers: Headers;
+};
+export type getChallengeAggregateResponse = (getChallengeAggregateResponseSuccess | getChallengeAggregateResponseError);
+export declare const getGetChallengeAggregateUrl: (params: GetChallengeAggregateParams) => string;
+export declare const getChallengeAggregate: (params: GetChallengeAggregateParams, options?: RequestInit) => Promise<getChallengeAggregateResponse>;
+export type createChallengeResponse200 = {
+    data: CreateChallengeResponse;
+    status: 200;
+};
+export type createChallengeResponse400 = {
+    data: ApiError;
+    status: 400;
+};
+export type createChallengeResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type createChallengeResponseSuccess = (createChallengeResponse200) & {
+    headers: Headers;
+};
+export type createChallengeResponseError = (createChallengeResponse400 | createChallengeResponse401) & {
+    headers: Headers;
+};
+export type createChallengeResponse = (createChallengeResponseSuccess | createChallengeResponseError);
+export declare const getCreateChallengeUrl: () => string;
+export declare const createChallenge: (createChallengeRequest: CreateChallengeRequest, options?: RequestInit) => Promise<createChallengeResponse>;
+export type createInvitesResponse200 = {
+    data: CreateInvitesResponse;
+    status: 200;
+};
+export type createInvitesResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type createInvitesResponseSuccess = (createInvitesResponse200) & {
+    headers: Headers;
+};
+export type createInvitesResponseError = (createInvitesResponse401) & {
+    headers: Headers;
+};
+export type createInvitesResponse = (createInvitesResponseSuccess | createInvitesResponseError);
+export declare const getCreateInvitesUrl: () => string;
+export declare const createInvites: (createInvitesRequest: CreateInvitesRequest, options?: RequestInit) => Promise<createInvitesResponse>;
+export type getAdminOverviewResponse200 = {
+    data: AdminOverview;
+    status: 200;
+};
+export type getAdminOverviewResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getAdminOverviewResponseSuccess = (getAdminOverviewResponse200) & {
+    headers: Headers;
+};
+export type getAdminOverviewResponseError = (getAdminOverviewResponseDefault) & {
+    headers: Headers;
+};
+export type getAdminOverviewResponse = (getAdminOverviewResponseSuccess | getAdminOverviewResponseError);
+export declare const getGetAdminOverviewUrl: () => string;
+export declare const getAdminOverview: (options?: RequestInit) => Promise<getAdminOverviewResponse>;
 export type signInDeviceWithSessionResponse200 = {
     data: SessionDeviceResponse;
     status: 200;
@@ -472,6 +604,23 @@ export type signupResponseError = (signupResponse400 | signupResponse409) & {
 export type signupResponse = (signupResponseSuccess | signupResponseError);
 export declare const getSignupUrl: () => string;
 export declare const signup: (signupRequest: SignupRequest, options?: RequestInit) => Promise<signupResponse>;
+export type getChallengesResponse200 = {
+    data: ChallengeList;
+    status: 200;
+};
+export type getChallengesResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getChallengesResponseSuccess = (getChallengesResponse200) & {
+    headers: Headers;
+};
+export type getChallengesResponseError = (getChallengesResponseDefault) & {
+    headers: Headers;
+};
+export type getChallengesResponse = (getChallengesResponseSuccess | getChallengesResponseError);
+export declare const getGetChallengesUrl: () => string;
+export declare const getChallenges: (options?: RequestInit) => Promise<getChallengesResponse>;
 /**
  * @summary Liveness probe
  */
@@ -485,6 +634,23 @@ export type healthResponseSuccess = (healthResponse200) & {
 export type healthResponse = (healthResponseSuccess);
 export declare const getHealthUrl: () => string;
 export declare const health: (options?: RequestInit) => Promise<healthResponse>;
+export type getLeaderboardResponse200 = {
+    data: Leaderboard;
+    status: 200;
+};
+export type getLeaderboardResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getLeaderboardResponseSuccess = (getLeaderboardResponse200) & {
+    headers: Headers;
+};
+export type getLeaderboardResponseError = (getLeaderboardResponseDefault) & {
+    headers: Headers;
+};
+export type getLeaderboardResponse = (getLeaderboardResponseSuccess | getLeaderboardResponseError);
+export declare const getGetLeaderboardUrl: (params?: GetLeaderboardParams) => string;
+export declare const getLeaderboard: (params?: GetLeaderboardParams, options?: RequestInit) => Promise<getLeaderboardResponse>;
 export type linkIdentityResponse200 = {
     data: LinkResponse;
     status: 200;
@@ -506,170 +672,23 @@ export type linkIdentityResponseError = (linkIdentityResponse401 | linkIdentityR
 export type linkIdentityResponse = (linkIdentityResponseSuccess | linkIdentityResponseError);
 export declare const getLinkIdentityUrl: () => string;
 export declare const linkIdentity: (linkRequest: LinkRequest, options?: RequestInit) => Promise<linkIdentityResponse>;
-export type getMyCompetitionsResponse200 = {
-    data: MyCompetition[];
-    status: 200;
-};
-export type getMyCompetitionsResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type getMyCompetitionsResponseSuccess = (getMyCompetitionsResponse200) & {
-    headers: Headers;
-};
-export type getMyCompetitionsResponseError = (getMyCompetitionsResponse401) & {
-    headers: Headers;
-};
-export type getMyCompetitionsResponse = (getMyCompetitionsResponseSuccess | getMyCompetitionsResponseError);
-export declare const getGetMyCompetitionsUrl: () => string;
-export declare const getMyCompetitions: (options?: RequestInit) => Promise<getMyCompetitionsResponse>;
-/**
- * @summary Organizations
- */
-export type listOrgsResponse200 = {
-    data: OrgSummary[];
-    status: 200;
-};
-export type listOrgsResponseDefault = {
-    data: ApiError;
-    status: Exclude<HTTPStatusCodes, 200>;
-};
-export type listOrgsResponseSuccess = (listOrgsResponse200) & {
-    headers: Headers;
-};
-export type listOrgsResponseError = (listOrgsResponseDefault) & {
-    headers: Headers;
-};
-export type listOrgsResponse = (listOrgsResponseSuccess | listOrgsResponseError);
-export declare const getListOrgsUrl: () => string;
-export declare const listOrgs: (options?: RequestInit) => Promise<listOrgsResponse>;
-export type getOrgResponse200 = {
-    data: OrgDetail;
-    status: 200;
-};
-export type getOrgResponse404 = {
-    data: ApiError;
-    status: 404;
-};
-export type getOrgResponseSuccess = (getOrgResponse200) & {
-    headers: Headers;
-};
-export type getOrgResponseError = (getOrgResponse404) & {
-    headers: Headers;
-};
-export type getOrgResponse = (getOrgResponseSuccess | getOrgResponseError);
-export declare const getGetOrgUrl: (slug: string) => string;
-export declare const getOrg: (slug: string, options?: RequestInit) => Promise<getOrgResponse>;
-export type createCompetitionResponse200 = {
-    data: CreateCompetitionResponse;
-    status: 200;
-};
-export type createCompetitionResponse400 = {
-    data: ApiError;
-    status: 400;
-};
-export type createCompetitionResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type createCompetitionResponseSuccess = (createCompetitionResponse200) & {
-    headers: Headers;
-};
-export type createCompetitionResponseError = (createCompetitionResponse400 | createCompetitionResponse401) & {
-    headers: Headers;
-};
-export type createCompetitionResponse = (createCompetitionResponseSuccess | createCompetitionResponseError);
-export declare const getCreateCompetitionUrl: (slug: string) => string;
-export declare const createCompetition: (slug: string, createCompetitionRequest: CreateCompetitionRequest, options?: RequestInit) => Promise<createCompetitionResponse>;
-export type createInvitesResponse200 = {
-    data: CreateInvitesResponse;
-    status: 200;
-};
-export type createInvitesResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type createInvitesResponseSuccess = (createInvitesResponse200) & {
-    headers: Headers;
-};
-export type createInvitesResponseError = (createInvitesResponse401) & {
-    headers: Headers;
-};
-export type createInvitesResponse = (createInvitesResponseSuccess | createInvitesResponseError);
-export declare const getCreateInvitesUrl: (slug: string) => string;
-export declare const createInvites: (slug: string, createInvitesRequest: CreateInvitesRequest, options?: RequestInit) => Promise<createInvitesResponse>;
-export type getAdminOverviewResponse200 = {
-    data: AdminOverview;
-    status: 200;
-};
-export type getAdminOverviewResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type getAdminOverviewResponseSuccess = (getAdminOverviewResponse200) & {
-    headers: Headers;
-};
-export type getAdminOverviewResponseError = (getAdminOverviewResponse401) & {
-    headers: Headers;
-};
-export type getAdminOverviewResponse = (getAdminOverviewResponseSuccess | getAdminOverviewResponseError);
-export declare const getGetAdminOverviewUrl: (slug: string) => string;
-export declare const getAdminOverview: (slug: string, options?: RequestInit) => Promise<getAdminOverviewResponse>;
-export type getCompetitionLeaderboardResponse200 = {
-    data: Leaderboard;
-    status: 200;
-};
-export type getCompetitionLeaderboardResponse404 = {
-    data: ApiError;
-    status: 404;
-};
-export type getCompetitionLeaderboardResponseSuccess = (getCompetitionLeaderboardResponse200) & {
-    headers: Headers;
-};
-export type getCompetitionLeaderboardResponseError = (getCompetitionLeaderboardResponse404) & {
-    headers: Headers;
-};
-export type getCompetitionLeaderboardResponse = (getCompetitionLeaderboardResponseSuccess | getCompetitionLeaderboardResponseError);
-export declare const getGetCompetitionLeaderboardUrl: (slug: string, cid: number) => string;
-export declare const getCompetitionLeaderboard: (slug: string, cid: number, options?: RequestInit) => Promise<getCompetitionLeaderboardResponse>;
-export type getCompetitionAggregateResponse200 = {
-    data: Aggregate;
-    status: 200;
-};
-export type getCompetitionAggregateResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type getCompetitionAggregateResponse404 = {
-    data: ApiError;
-    status: 404;
-};
-export type getCompetitionAggregateResponseSuccess = (getCompetitionAggregateResponse200) & {
-    headers: Headers;
-};
-export type getCompetitionAggregateResponseError = (getCompetitionAggregateResponse401 | getCompetitionAggregateResponse404) & {
-    headers: Headers;
-};
-export type getCompetitionAggregateResponse = (getCompetitionAggregateResponseSuccess | getCompetitionAggregateResponseError);
-export declare const getGetCompetitionAggregateUrl: (slug: string, cid: number) => string;
-export declare const getCompetitionAggregate: (slug: string, cid: number, options?: RequestInit) => Promise<getCompetitionAggregateResponse>;
 export type getMemberDetailResponse200 = {
     data: MemberDetail;
     status: 200;
 };
-export type getMemberDetailResponse404 = {
+export type getMemberDetailResponseDefault = {
     data: ApiError;
-    status: 404;
+    status: Exclude<HTTPStatusCodes, 200>;
 };
 export type getMemberDetailResponseSuccess = (getMemberDetailResponse200) & {
     headers: Headers;
 };
-export type getMemberDetailResponseError = (getMemberDetailResponse404) & {
+export type getMemberDetailResponseError = (getMemberDetailResponseDefault) & {
     headers: Headers;
 };
 export type getMemberDetailResponse = (getMemberDetailResponseSuccess | getMemberDetailResponseError);
-export declare const getGetMemberDetailUrl: (slug: string, cid: number, id: number) => string;
-export declare const getMemberDetail: (slug: string, cid: number, id: number, options?: RequestInit) => Promise<getMemberDetailResponse>;
+export declare const getGetMemberDetailUrl: (id: number, params?: GetMemberDetailParams) => string;
+export declare const getMemberDetail: (id: number, params?: GetMemberDetailParams, options?: RequestInit) => Promise<getMemberDetailResponse>;
 export type pushSyncResponse200 = {
     data: SyncResponse;
     status: 200;
@@ -687,3 +706,58 @@ export type pushSyncResponseError = (pushSyncResponse401) & {
 export type pushSyncResponse = (pushSyncResponseSuccess | pushSyncResponseError);
 export declare const getPushSyncUrl: () => string;
 export declare const pushSync: (syncRequest: SyncRequest, options?: RequestInit) => Promise<pushSyncResponse>;
+export type impersonateResponse200 = {
+    data: ImpersonateResponse;
+    status: 200;
+};
+export type impersonateResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type impersonateResponse404 = {
+    data: ApiError;
+    status: 404;
+};
+export type impersonateResponseSuccess = (impersonateResponse200) & {
+    headers: Headers;
+};
+export type impersonateResponseError = (impersonateResponse401 | impersonateResponse404) & {
+    headers: Headers;
+};
+export type impersonateResponse = (impersonateResponseSuccess | impersonateResponseError);
+export declare const getImpersonateUrl: () => string;
+export declare const impersonate: (impersonateRequest: ImpersonateRequest, options?: RequestInit) => Promise<impersonateResponse>;
+export type stopImpersonationResponse200 = {
+    data: StopImpersonationResponse;
+    status: 200;
+};
+export type stopImpersonationResponse400 = {
+    data: ApiError;
+    status: 400;
+};
+export type stopImpersonationResponseSuccess = (stopImpersonationResponse200) & {
+    headers: Headers;
+};
+export type stopImpersonationResponseError = (stopImpersonationResponse400) & {
+    headers: Headers;
+};
+export type stopImpersonationResponse = (stopImpersonationResponseSuccess | stopImpersonationResponseError);
+export declare const getStopImpersonationUrl: () => string;
+export declare const stopImpersonation: (options?: RequestInit) => Promise<stopImpersonationResponse>;
+export type getSystemOverviewResponse200 = {
+    data: SystemOverview;
+    status: 200;
+};
+export type getSystemOverviewResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getSystemOverviewResponseSuccess = (getSystemOverviewResponse200) & {
+    headers: Headers;
+};
+export type getSystemOverviewResponseError = (getSystemOverviewResponseDefault) & {
+    headers: Headers;
+};
+export type getSystemOverviewResponse = (getSystemOverviewResponseSuccess | getSystemOverviewResponseError);
+export declare const getGetSystemOverviewUrl: () => string;
+export declare const getSystemOverview: (options?: RequestInit) => Promise<getSystemOverviewResponse>;

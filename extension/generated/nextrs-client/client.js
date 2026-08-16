@@ -1,3 +1,62 @@
+export const getGetChallengeAggregateUrl = (params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : value.toString());
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/api/admin/aggregate?${stringifiedParams}` : `/api/admin/aggregate`;
+};
+export const getChallengeAggregate = async (params, options) => {
+    const res = await fetch(getGetChallengeAggregateUrl(params), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getCreateChallengeUrl = () => {
+    return `/api/admin/challenges`;
+};
+export const createChallenge = async (createChallengeRequest, options) => {
+    const res = await fetch(getCreateChallengeUrl(), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(createChallengeRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getCreateInvitesUrl = () => {
+    return `/api/admin/invites`;
+};
+export const createInvites = async (createInvitesRequest, options) => {
+    const res = await fetch(getCreateInvitesUrl(), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(createInvitesRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetAdminOverviewUrl = () => {
+    return `/api/admin/overview`;
+};
+export const getAdminOverview = async (options) => {
+    const res = await fetch(getGetAdminOverviewUrl(), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
 export const getSignInDeviceWithSessionUrl = () => {
     return `/api/auth/device/session`;
 };
@@ -79,12 +138,43 @@ export const signup = async (signupRequest, options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
+export const getGetChallengesUrl = () => {
+    return `/api/challenges`;
+};
+export const getChallenges = async (options) => {
+    const res = await fetch(getGetChallengesUrl(), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
 ;
 export const getHealthUrl = () => {
     return `/api/health`;
 };
 export const health = async (options) => {
     const res = await fetch(getHealthUrl(), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetLeaderboardUrl = (params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : value.toString());
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/api/leaderboard?${stringifiedParams}` : `/api/leaderboard`;
+};
+export const getLeaderboard = async (params, options) => {
+    const res = await fetch(getGetLeaderboardUrl(params), {
         ...options,
         method: 'GET'
     });
@@ -106,111 +196,18 @@ export const linkIdentity = async (linkRequest, options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
-export const getGetMyCompetitionsUrl = () => {
-    return `/api/me/competitions`;
-};
-export const getMyCompetitions = async (options) => {
-    const res = await fetch(getGetMyCompetitionsUrl(), {
-        ...options,
-        method: 'GET'
+export const getGetMemberDetailUrl = (id, params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : value.toString());
+        }
     });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/api/members/${id}?${stringifiedParams}` : `/api/members/${id}`;
 };
-export const getListOrgsUrl = () => {
-    return `/api/orgs`;
-};
-export const listOrgs = async (options) => {
-    const res = await fetch(getListOrgsUrl(), {
-        ...options,
-        method: 'GET'
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getGetOrgUrl = (slug) => {
-    return `/api/orgs/${slug}`;
-};
-export const getOrg = async (slug, options) => {
-    const res = await fetch(getGetOrgUrl(slug), {
-        ...options,
-        method: 'GET'
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getCreateCompetitionUrl = (slug) => {
-    return `/api/orgs/${slug}/admin/competitions`;
-};
-export const createCompetition = async (slug, createCompetitionRequest, options) => {
-    const res = await fetch(getCreateCompetitionUrl(slug), {
-        ...options,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: JSON.stringify(createCompetitionRequest)
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getCreateInvitesUrl = (slug) => {
-    return `/api/orgs/${slug}/admin/invites`;
-};
-export const createInvites = async (slug, createInvitesRequest, options) => {
-    const res = await fetch(getCreateInvitesUrl(slug), {
-        ...options,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: JSON.stringify(createInvitesRequest)
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getGetAdminOverviewUrl = (slug) => {
-    return `/api/orgs/${slug}/admin/overview`;
-};
-export const getAdminOverview = async (slug, options) => {
-    const res = await fetch(getGetAdminOverviewUrl(slug), {
-        ...options,
-        method: 'GET'
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getGetCompetitionLeaderboardUrl = (slug, cid) => {
-    return `/api/orgs/${slug}/competitions/${cid}`;
-};
-export const getCompetitionLeaderboard = async (slug, cid, options) => {
-    const res = await fetch(getGetCompetitionLeaderboardUrl(slug, cid), {
-        ...options,
-        method: 'GET'
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getGetCompetitionAggregateUrl = (slug, cid) => {
-    return `/api/orgs/${slug}/competitions/${cid}/aggregate`;
-};
-export const getCompetitionAggregate = async (slug, cid, options) => {
-    const res = await fetch(getGetCompetitionAggregateUrl(slug, cid), {
-        ...options,
-        method: 'GET'
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getGetMemberDetailUrl = (slug, cid, id) => {
-    return `/api/orgs/${slug}/competitions/${cid}/members/${id}`;
-};
-export const getMemberDetail = async (slug, cid, id, options) => {
-    const res = await fetch(getGetMemberDetailUrl(slug, cid, id), {
+export const getMemberDetail = async (id, params, options) => {
+    const res = await fetch(getGetMemberDetailUrl(id, params), {
         ...options,
         method: 'GET'
     });
@@ -227,6 +224,44 @@ export const pushSync = async (syncRequest, options) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
         body: JSON.stringify(syncRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getImpersonateUrl = () => {
+    return `/api/system/impersonate`;
+};
+export const impersonate = async (impersonateRequest, options) => {
+    const res = await fetch(getImpersonateUrl(), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(impersonateRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getStopImpersonationUrl = () => {
+    return `/api/system/impersonate/stop`;
+};
+export const stopImpersonation = async (options) => {
+    const res = await fetch(getStopImpersonationUrl(), {
+        ...options,
+        method: 'POST'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetSystemOverviewUrl = () => {
+    return `/api/system/overview`;
+};
+export const getSystemOverview = async (options) => {
+    const res = await fetch(getGetSystemOverviewUrl(), {
+        ...options,
+        method: 'GET'
     });
     const body = [204, 205, 304].includes(res.status) ? null : await res.text();
     const data = body ? JSON.parse(body) : {};

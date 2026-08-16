@@ -4,18 +4,58 @@
 // The information architecture is the manifest's three questions: "How is everyone doing?"
 // (Leaderboard), "How am I doing?" (My results), "How does this work?" (How scoring works) —
 // plus Admin for the people running the challenge and System for the product operator.
-import type { ReactNode } from "react";
+import { Component, type ReactNode } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { useGetMe, useLogout, useStopImpersonation } from "@linkedin-challenge/client/react-query";
 
-function NavLink({ href, label }: { href: string; label: string }) {
+function NavLink({ href, pathname }: { href: string; pathname: string }) {
+  // Prefix-match so /admin/challenges lights "Challenge setup"; exact-match "/" and "/admin" so
+  // Leaderboard and Overview don't stay lit for every child underneath them.
   const active =
-    typeof window !== "undefined" &&
-    (href === "/" ? window.location.pathname === "/" : window.location.pathname.startsWith(href));
+    href === "/" || href === "/admin" ? pathname === href : pathname.startsWith(href);
   return (
     <a className={active ? "nav-link active" : "nav-link"} href={href}>
-      {label}
+      {label(href)}
     </a>
   );
+}
+
+const LABELS: Record<string, string> = {
+  "/": "Leaderboard",
+  "/me": "My results",
+  "/challenges": "Challenges",
+  "/rules": "How scoring works",
+  "/admin": "Overview",
+  "/admin/challenges": "Challenge setup",
+  "/admin/invites": "Invites",
+  "/system": "All organizations",
+};
+const label = (href: string) => LABELS[href] ?? href;
+
+// The active tab must track the URL across soft navigations, and only the app shell's TanStack
+// Router knows about those — window.location would paint once at mount and never move. But
+// not-found.tsx boots OUTSIDE the router (its URL is never in the shell's route tree), where
+// useLocation throws. So the live reader sits in its own component and this boundary catches the
+// no-router case, falling back to the boot-time pathname — always accurate there, since a
+// not-found document is only ever a hard load.
+function RouterPathname({ children }: { children: (pathname: string) => ReactNode }) {
+  return children(useLocation({ select: (l) => l.pathname }));
+}
+
+class PathnameProvider extends Component<
+  { children: (pathname: string) => ReactNode },
+  { outsideRouter: boolean }
+> {
+  state = { outsideRouter: false };
+  static getDerivedStateFromError() {
+    return { outsideRouter: true };
+  }
+  render() {
+    if (this.state.outsideRouter) {
+      return this.props.children(window.location.pathname);
+    }
+    return <RouterPathname>{this.props.children}</RouterPathname>;
+  }
 }
 
 function Sidebar() {
@@ -36,26 +76,32 @@ function Sidebar() {
       </a>
 
       <nav className="side-nav">
-        <NavLink href="/" label="Leaderboard" />
-        <NavLink href="/me" label="My results" />
-        <NavLink href="/challenges" label="Challenges" />
-        <NavLink href="/rules" label="How scoring works" />
+        <PathnameProvider>
+          {(pathname) => (
+            <>
+              <NavLink href="/" pathname={pathname} />
+              <NavLink href="/me" pathname={pathname} />
+              <NavLink href="/challenges" pathname={pathname} />
+              <NavLink href="/rules" pathname={pathname} />
 
-        {me.isAdmin && (
-          <>
-            <div className="nav-section">Admin</div>
-            <NavLink href="/admin" label="Overview" />
-            <NavLink href="/admin/challenges" label="Challenge setup" />
-            <NavLink href="/admin/invites" label="Invites" />
-          </>
-        )}
+              {me.isAdmin && (
+                <>
+                  <div className="nav-section">Admin</div>
+                  <NavLink href="/admin" pathname={pathname} />
+                  <NavLink href="/admin/challenges" pathname={pathname} />
+                  <NavLink href="/admin/invites" pathname={pathname} />
+                </>
+              )}
 
-        {me.isSystemAdmin && (
-          <>
-            <div className="nav-section">System</div>
-            <NavLink href="/system" label="All organizations" />
-          </>
-        )}
+              {me.isSystemAdmin && (
+                <>
+                  <div className="nav-section">System</div>
+                  <NavLink href="/system" pathname={pathname} />
+                </>
+              )}
+            </>
+          )}
+        </PathnameProvider>
       </nav>
 
       <div className="side-foot">

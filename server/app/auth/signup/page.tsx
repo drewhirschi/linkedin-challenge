@@ -24,7 +24,7 @@ export default function Signup() {
               {
                 onSuccess: (res) => {
                   if (res.status === 200) {
-                    window.location.href = `/orgs/${res.data.orgSlug}/admin`;
+                    window.location.href = "/admin";
                   } else {
                     // The server distinguishes "email taken" from "password too short"; show its
                     // wording rather than inventing our own.
