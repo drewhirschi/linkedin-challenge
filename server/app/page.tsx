@@ -1,74 +1,181 @@
-// Home: the competitions you're in, and where you stand in each. Scoped to the viewer rather than
-// listing every org, because "what am I competing in" is the question someone signing in has.
-import { useGetMyCompetitions, useGetMe } from "@linkedin-challenge/client/react-query";
-import { fmtInt, fmtNum, fmtDate } from "../components/format";
+// The leaderboard — the app's landing page, answering "how is everyone doing?". A switcher covers
+// orgs running more than one challenge; the default is whichever the server considers current.
+import { useState } from "react";
+import { useGetLeaderboard, useGetChallengeAggregate, useGetMe } from "@linkedin-challenge/client/react-query";
+import { fmtInt, fmtNum, fmtDate, initials } from "../components/format";
 
-export default function Home() {
-  const { data, isLoading } = useGetMyCompetitions();
+// The extra numbers an organiser wants while looking at a board — inline rather than on a
+// separate screen, because "how is this challenge doing" is the same question the board answers,
+// just wider.
+function AdminStrip({ challengeId, enabled }: { challengeId: number; enabled: boolean }) {
+  const { data } = useGetChallengeAggregate({ challengeId }, { query: { enabled } });
+  if (!enabled || data?.status !== 200) return null;
+  const a = data.data;
+
+  const cells: [string, string][] = [
+    ["Members", fmtInt(a.participants)],
+    ["Scoring", fmtInt(a.scoringParticipants)],
+    ["Posts in window", fmtInt(a.totalPosts)],
+    ["Posts graded", fmtInt(a.gradedPosts)],
+    ["Impressions", fmtInt(a.totalImpressions)],
+    ["Reactions", fmtInt(a.totalReactions)],
+    ["Comments", fmtInt(a.totalComments)],
+    ["Reposts", fmtInt(a.totalReposts)],
+    ["Combined followers", fmtInt(a.totalFollowers)],
+    ["Points awarded", fmtNum(a.totalPoints)],
+    ["Invites", `${a.invitesRedeemed} used / ${a.invitesOpen} open`],
+  ];
+
+  return (
+    <div className="admin-strip">
+      <div className="k" style={{ marginBottom: 8 }}>
+        Organiser view
+      </div>
+      <div className="metrics">
+        {cells.map(([k, v]) => (
+          <div className="metric" key={k}>
+            <span className="n">{v}</span>
+            <span className="k">{k}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function LeaderboardPage() {
+  // undefined = "whatever the org's current challenge is"; a number = an explicit pick.
+  const [challengeId, setChallengeId] = useState<number | undefined>(undefined);
+  const { data, isLoading } = useGetLeaderboard(
+    challengeId !== undefined ? { challengeId } : undefined,
+  );
   const { data: meData } = useGetMe();
   const me = meData?.status === 200 ? meData.data : undefined;
-  const mine = data?.status === 200 ? data.data : [];
 
-  if (isLoading) return <div className="spinner">Loading…</div>;
+  if (isLoading) return <div className="spinner">Loading leaderboard…</div>;
+  if (data?.status !== 200) {
+    return (
+      <div className="empty">
+        Your session expired. <a href="/auth/login">Log in again</a>.
+      </div>
+    );
+  }
+
+  const { competition, challenges, standings } = data.data;
+
+  if (!competition) {
+    return (
+      <>
+        <h1>Leaderboard</h1>
+        <div className="empty">
+          No challenge yet.
+          {me?.isAdmin ? (
+            <>
+              {" "}
+              <a href="/admin/challenges">Set one up</a> to start scoring.
+            </>
+          ) : (
+            " Your admin hasn't set one up yet."
+          )}
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
-      <h1>Your challenges</h1>
+      <div className="week-head">
+        <h1 style={{ margin: 0 }}>{competition.name}</h1>
+        {challenges.length > 1 && (
+          <select
+            value={competition.id}
+            onChange={(e) => setChallengeId(Number(e.target.value))}
+            aria-label="Challenge"
+          >
+            {challenges.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <p className="lede">
+        {fmtDate(competition.startAt)} → {fmtDate(competition.endAt)}
+        {competition.isActive && (
+          <>
+            {" · "}
+            <span className="badge ok">Active</span>
+          </>
+        )}
+        {" · "}
+        <a href="/rules">How scoring works</a>
+      </p>
 
-      {mine.length === 0 ? (
-        <div className="empty">
-          You&rsquo;re not in any competitions yet.
-          {me?.isAdmin && me.orgSlug && (
-            <>
-              {" "}
-              <a href={`/orgs/${me.orgSlug}/admin`}>Set one up</a>.
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="grid cols-2">
-          {mine.map(({ org, competition, standing, entrants }) => (
-            <div className="panel" key={competition.id}>
-              <h2 style={{ marginTop: 0 }}>
-                <a href={`/orgs/${org.slug}/c/${competition.id}`}>{competition.name}</a>
-              </h2>
-              <p className="small muted" style={{ marginTop: 0 }}>
-                {org.name} · {fmtDate(competition.startAt)} → {fmtDate(competition.endAt)}
-                {competition.isActive && (
-                  <>
-                    {" · "}
-                    <span className="badge ok">Active</span>
-                  </>
-                )}
-              </p>
+      <AdminStrip challengeId={competition.id} enabled={Boolean(me?.isAdmin)} />
 
-              {standing ? (
-                <div className="grid cols-3">
-                  <div className="stat">
-                    <div className="k">Your rank</div>
-                    <div className="v">
-                      #{standing.rank}
-                      <span className="muted small"> / {fmtInt(entrants)}</span>
-                    </div>
-                  </div>
-                  <div className="stat">
-                    <div className="k">Your points</div>
-                    <div className="v">{fmtNum(standing.total)}</div>
-                  </div>
-                  <div className="stat">
-                    <div className="k">Posts scored</div>
-                    <div className="v">{standing.gradedPosts}</div>
-                  </div>
-                </div>
-              ) : (
-                <p className="small muted">
-                  Nothing scored yet — sync from the extension to appear on the board.
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="panel" style={{ marginTop: 16, padding: 0, overflow: "hidden" }}>
+        {standings.length === 0 ? (
+          <div className="empty">
+            Nobody has synced data for this challenge yet. Standings appear once people connect
+            the extension.
+          </div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Participant</th>
+                <th className="num">Followers</th>
+                <th className="num">Posts</th>
+                <th className="num">Post pts</th>
+                <th className="num">Profile pts</th>
+                <th className="num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((row) => (
+                <tr key={row.memberId} className={row.memberId === me?.memberId ? "me-row" : undefined}>
+                  <td className={`rank r${row.rank}`}>{row.rank}</td>
+                  <td>
+                    <a
+                      className="who"
+                      href={
+                        row.memberId === me?.memberId
+                          ? "/me"
+                          : `/members/${row.memberId}?challengeId=${competition.id}`
+                      }
+                    >
+                      <span className="avatar">{initials(row.displayName)}</span>
+                      <span>
+                        {row.displayName}
+                        {row.memberId === me?.memberId && <span className="muted"> (you)</span>}
+                      </span>
+                    </a>
+                  </td>
+                  <td className="num">{fmtInt(row.followerCount)}</td>
+                  <td className="num">
+                    {row.gradedPosts}
+                    {row.totalPosts > row.gradedPosts && (
+                      <span className="muted small"> / {row.totalPosts}</span>
+                    )}
+                  </td>
+                  <td className="num">{fmtNum(row.postPoints)}</td>
+                  <td className="num">{fmtNum(row.profilePoints)}</td>
+                  <td className="num">
+                    <strong>{fmtNum(row.total)}</strong>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <p className="small muted">
+        Click any participant to see the posts behind their score. Scores are computed fresh from
+        the latest synced numbers every time this page loads — nothing is stored.
+      </p>
     </>
   );
 }

@@ -54,11 +54,6 @@ pub struct Org {
     pub competitions: toasty::Deferred<Vec<Competition>>,
 }
 
-/// Key for [`CompetitionEntry::entry_key`].
-pub fn entry_key(competition_id: i64, member_id: i64) -> String {
-    format!("{competition_id}:{member_id}")
-}
-
 /// A person in an org. Participants sync via the extension; admins manage the challenge.
 #[derive(Debug, toasty::Model)]
 pub struct Member {
@@ -78,6 +73,9 @@ pub struct Member {
     pub profile_url: Option<String>,
 
     pub is_admin: bool,
+    /// Operator of the product itself, across every org — unlocks the system panel and
+    /// impersonation. Granted by seed or by hand, never through any API.
+    pub is_system_admin: bool,
     /// Admin login email (None for participants). Uniqueness enforced in code at signup.
     pub email: Option<String>,
     /// Argon2 password hash for admins (None for participants).
@@ -149,34 +147,6 @@ pub struct Competition {
 
     pub is_active: bool,
     pub created_at: i64,
-}
-
-/// A member's entry in one competition — what "joined" actually means.
-///
-/// Before this, everyone in an org was implicitly in every competition, so there was no answer to
-/// "which competitions am I in", no way to run two at once without them bleeding together, and no
-/// way to sit one out. A leaderboard now ranks a competition's *entrants*.
-#[derive(Debug, toasty::Model)]
-pub struct CompetitionEntry {
-    #[key]
-    #[auto]
-    pub id: i64,
-    #[index]
-    pub competition_id: i64,
-    #[belongs_to(key = competition_id, references = id)]
-    pub competition: toasty::Deferred<Competition>,
-
-    #[index]
-    pub member_id: i64,
-    #[belongs_to(key = member_id, references = id)]
-    pub member: toasty::Deferred<Member>,
-
-    /// `{competition_id}:{member_id}` — Toasty has no composite unique key, so this stands in for
-    /// one and stops a double-enrolment from ever reaching the table.
-    #[unique]
-    pub entry_key: String,
-
-    pub joined_at: i64,
 }
 
 /// A post authored by a member. Deduped by LinkedIn URN.
@@ -279,11 +249,18 @@ pub struct ProfileSnapshot {
     pub profile_views: Option<i64>,
 }
 
-/// An admin web session: hex(token_hash) -> admin member id + expiry (unix secs).
+/// A web session: hex(token_hash) -> member id + expiry (unix secs).
+///
+/// ("Admin" in the name is historical — everyone signs in now; renaming the model would orphan
+/// existing session tables for no behavioral gain.)
 #[derive(Debug, toasty::Model)]
 pub struct AdminSession {
     #[key]
     pub token_hash: String,
     pub admin_id: i64,
     pub expires_at: i64,
+    /// When set, this session was started by a system admin impersonating `admin_id`; the value is
+    /// the system admin's own member id. Lets the UI show who is really acting, and lets "stop
+    /// impersonating" return to the operator's own account.
+    pub impersonator_id: Option<i64>,
 }

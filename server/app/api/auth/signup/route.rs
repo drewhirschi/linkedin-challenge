@@ -73,6 +73,7 @@ pub async fn post(
         public_identifier: "",
         profile_url: None,
         is_admin: true,
+        is_system_admin: false,
         email: Some(email),
         password_hash: Some(hash_password(&req.password)),
         api_token_hash: token_hash,

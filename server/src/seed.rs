@@ -3,7 +3,7 @@
 
 use toasty::Db;
 
-use crate::models::{Competition, CompetitionEntry, Member, Org, Post, PostSnapshot, ProfileSnapshot, entry_key};
+use crate::models::{Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot};
 use crate::scoring::ScoringConfig;
 use crate::auth::hash_password;
 use crate::util::{new_bearer_token, now_unix};
@@ -93,7 +93,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
     .await?;
 
     let cfg = ScoringConfig::default();
-    let comp = toasty::create!(Competition {
+    toasty::create!(Competition {
         org_id: org.id,
         name: "Autumn Posting Sprint",
         start_at: start,
@@ -125,9 +125,29 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
         public_identifier: "",
         profile_url: None,
         is_admin: true,
+        is_system_admin: false,
         email: Some("admin@demo.test".to_string()),
         password_hash: Some(hash_password(DEMO_PASSWORD)),
         api_token_hash: admin_token,
+        created_at: now,
+    })
+    .exec(&mut *db)
+    .await?;
+
+    // A product operator for the system panel: sysadmin@demo.test / demopassword. Belongs to the
+    // demo org (every member belongs somewhere) but the flag is what matters.
+    let (_unused, sys_token) = new_bearer_token();
+    toasty::create!(Member {
+        org_id: org.id,
+        display_name: "System Operator",
+        linkedin_urn: "pending:sysadmin@demo.test",
+        public_identifier: "",
+        profile_url: None,
+        is_admin: true,
+        is_system_admin: true,
+        email: Some("sysadmin@demo.test".to_string()),
+        password_hash: Some(hash_password(DEMO_PASSWORD)),
+        api_token_hash: sys_token,
         created_at: now,
     })
     .exec(&mut *db)
@@ -145,22 +165,13 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
             public_identifier: slug.clone(),
             profile_url: Some(format!("https://www.linkedin.com/in/{slug}/")),
             is_admin: false,
+            is_system_admin: false,
             // Everyone signs in, so seeded participants need real credentials or the demo is
             // unusable: <first-name>@demo.test / demopassword.
             email: Some(format!("{}@demo.test", slug.split('-').next().unwrap_or(&slug))),
             password_hash: Some(hash_password(DEMO_PASSWORD)),
             api_token_hash: token_hash,
             created_at: now,
-        })
-        .exec(&mut *db)
-        .await?;
-
-        // Enter the demo competition — a leaderboard ranks entrants now, not everyone in the org.
-        toasty::create!(CompetitionEntry {
-            competition_id: comp.id,
-            member_id: member.id,
-            entry_key: entry_key(comp.id, member.id),
-            joined_at: now,
         })
         .exec(&mut *db)
         .await?;
@@ -195,6 +206,8 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
             .exec(&mut *db)
             .await?;
 
+            // The author-only analytics, derived from the base numbers so the detail page has
+            // a full LinkedIn-style breakdown without hand-writing five more columns per post.
             toasty::create!(PostSnapshot {
                 post_id: post.id,
                 captured_at: now,
@@ -202,6 +215,12 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
                 reactions: Some(*reactions),
                 comments: Some(*comments),
                 reposts: Some(*reposts),
+                sends: Some(reposts / 2),
+                saves: Some(comments / 2),
+                impressions_in_network: Some(impressions * 7 / 10),
+                impressions_out_of_network: Some(impressions * 3 / 10),
+                profile_viewers_from_post: Some(reactions / 4),
+                followers_from_post: Some(reactions / 10),
             })
             .exec(&mut *db)
             .await?;

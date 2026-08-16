@@ -7,8 +7,7 @@
 use axum::{Extension, Json};
 use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use linkedin_challenge_server::auth::{establish_session, hash_password, member_by_email};
-use linkedin_challenge_server::dto::enter_competition;
-use linkedin_challenge_server::models::{Competition, Invite, Member, Org};
+use linkedin_challenge_server::models::{Invite, Member, Org};
 use linkedin_challenge_server::util::{new_bearer_token, now_unix};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
 use serde::{Deserialize, Serialize};
@@ -87,6 +86,7 @@ pub async fn post(
         public_identifier: "",
         profile_url: None,
         is_admin: invite.role == "admin",
+        is_system_admin: false,
         email: Some(email),
         password_hash: Some(hash_password(&req.password)),
         api_token_hash: token_hash,
@@ -102,14 +102,6 @@ pub async fn post(
     // Enter the org's live competitions, so a new joiner appears on the board without an admin
     // having to do anything. Finished ones are left alone — you can't retroactively compete.
     // Admins are entered too: they typically compete as well as organise.
-    let comps = Competition::filter(Competition::fields().org_id().eq(org.id))
-        .exec(&mut db)
-        .await?;
-    let now = now_unix();
-    for c in comps.iter().filter(|c| c.is_active && c.end_at >= now) {
-        enter_competition(&mut db, c.id, member.id).await?;
-    }
-
     let cookie = establish_session(&mut db, member.id).await?;
     let mut headers = HeaderMap::new();
     if let Ok(value) = HeaderValue::from_str(&cookie) {

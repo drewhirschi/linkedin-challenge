@@ -83,6 +83,15 @@ pub async fn member_by_email(db: &mut Db, email: &str) -> toasty::Result<Option<
 
 // --- sessions --------------------------------------------------------------------------
 
+/// A resolved session: who the request acts as, and — under impersonation — who is really driving.
+pub struct SessionInfo {
+    /// The member every read and write is scoped to. Under impersonation this is the target, so
+    /// the rest of the app needs no impersonation awareness at all.
+    pub member: Member,
+    /// The system admin actually behind the requests, when this session is an impersonation.
+    pub impersonator: Option<Member>,
+}
+
 /// Resolve a raw session token to its member, honouring expiry.
 ///
 /// Split out from `current_member` because the extension holds the session token itself (read from
@@ -90,6 +99,11 @@ pub async fn member_by_email(db: &mut Db, email: &str) -> toasty::Result<Option<
 /// one cross-origin, and allowing credentialed cross-origin requests would mean reflecting origins
 /// and opening a CSRF surface on every cookie-authed route.
 pub async fn member_from_session_token(db: &mut Db, token: &str) -> Option<Member> {
+    Some(session_from_token(db, token).await?.member)
+}
+
+/// Full resolution of a session token, including the impersonation edge.
+pub async fn session_from_token(db: &mut Db, token: &str) -> Option<SessionInfo> {
     let key = hash_bearer_token(token);
     let sess = AdminSession::filter_by_token_hash(&key)
         .first()
@@ -99,12 +113,34 @@ pub async fn member_from_session_token(db: &mut Db, token: &str) -> Option<Membe
     if sess.expires_at <= now_unix() {
         return None;
     }
-    Member::filter_by_id(sess.admin_id)
+    let member = Member::filter_by_id(sess.admin_id)
         .first()
         .exec(&mut *db)
         .await
         .ok()
-        .flatten()
+        .flatten()?;
+    let impersonator = match sess.impersonator_id {
+        Some(id) => {
+            let real = Member::filter_by_id(id).first().exec(&mut *db).await.ok().flatten();
+            // The impersonator must still BE a system admin: were the flag revoked mid-session,
+            // the borrowed session dies with it rather than outliving the privilege.
+            match real {
+                Some(real) if real.is_system_admin => Some(real),
+                _ => return None,
+            }
+        }
+        None => None,
+    };
+    Some(SessionInfo {
+        member,
+        impersonator,
+    })
+}
+
+/// The full session for this request — member plus any impersonator — or None.
+pub async fn current_session(db: &mut Db, headers: &HeaderMap) -> Option<SessionInfo> {
+    let token = cookie(headers, SESSION_COOKIE)?;
+    session_from_token(db, &token).await
 }
 
 /// The signed-in member for this request, or None. Everyone signs in — participants included —
@@ -119,13 +155,34 @@ pub async fn current_admin(db: &mut Db, headers: &HeaderMap) -> Option<Member> {
     current_member(db, headers).await.filter(|m| m.is_admin)
 }
 
+/// The signed-in member, but only if they operate the product itself.
+///
+/// Deliberately checks the member the session acts as, not the impersonator: an impersonating
+/// system admin sees exactly what the target sees, system panel excluded. They stop impersonating
+/// first — one honest view at a time.
+pub async fn current_system_admin(db: &mut Db, headers: &HeaderMap) -> Option<Member> {
+    current_member(db, headers)
+        .await
+        .filter(|m| m.is_system_admin)
+}
+
 /// Start a session for a member: persist the hash, return the `Set-Cookie` value for the response.
 pub async fn establish_session(db: &mut Db, member_id: i64) -> toasty::Result<String> {
+    establish_session_as(db, member_id, None).await
+}
+
+/// Start a session, optionally marked as an impersonation by a system admin.
+pub async fn establish_session_as(
+    db: &mut Db,
+    member_id: i64,
+    impersonator_id: Option<i64>,
+) -> toasty::Result<String> {
     let (secret, hash) = new_bearer_token();
     toasty::create!(AdminSession {
         token_hash: hash,
         admin_id: member_id,
         expires_at: now_unix() + SESSION_SECS,
+        impersonator_id,
     })
     .exec(&mut *db)
     .await?;
