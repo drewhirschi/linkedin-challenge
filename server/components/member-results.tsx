@@ -3,7 +3,18 @@
 // the leaderboard drill-in — the manifest wants those to be the same view of the same data.
 import { useGetMemberDetail } from "@linkedin-challenge/client/react-query";
 import type { PostStat, WeekGroup } from "@linkedin-challenge/client";
+import { useMemo, useState } from "react";
 import { fmtInt, fmtNum, fmtDate, initials } from "./format";
+
+type PostSort =
+  | "newest"
+  | "oldest"
+  | "impressions"
+  | "reactions"
+  | "comments"
+  | "reposts"
+  | "sends"
+  | "saves";
 
 function Metric({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
@@ -88,6 +99,75 @@ function Week({ group, gradedPerWeek }: { group: WeekGroup; gradedPerWeek: numbe
   );
 }
 
+function PostExplorer({ posts }: { posts: PostStat[] }) {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<PostSort>("newest");
+  const shown = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    const filtered = needle
+      ? posts.filter((post) => post.textPreview?.toLocaleLowerCase().includes(needle))
+      : posts;
+    const direction = sort === "oldest" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sort === "newest" || sort === "oldest") {
+        return direction * (a.postedAt - b.postedAt);
+      }
+      const difference = b[sort] - a[sort];
+      return difference || b.postedAt - a.postedAt;
+    });
+  }, [posts, query, sort]);
+
+  return (
+    <section className="post-explorer">
+      <div className="post-explorer-head">
+        <div>
+          <h2>Synced posts</h2>
+          <p className="small muted">
+            {shown.length === posts.length
+              ? `${posts.length} post${posts.length === 1 ? "" : "s"}`
+              : `${shown.length} of ${posts.length} posts`}
+          </p>
+        </div>
+        <div className="post-controls">
+          <label>
+            <span>Filter posts</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search post text"
+            />
+          </label>
+          <label>
+            <span>Sort by</span>
+            <select value={sort} onChange={(event) => setSort(event.target.value as PostSort)}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="impressions">Most impressions</option>
+              <option value="reactions">Most reactions</option>
+              <option value="comments">Most comments</option>
+              <option value="reposts">Most reposts</option>
+              <option value="sends">Most sends</option>
+              <option value="saves">Most saves</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      {shown.length === 0 ? (
+        <div className="empty">
+          {posts.length === 0 ? "No posts have synced yet." : "No posts match that filter."}
+        </div>
+      ) : (
+        <div className="post-list">
+          {shown.map((post) => (
+            <Post key={post.id} post={post} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function MemberResults({
   memberId,
   challengeId,
@@ -111,6 +191,7 @@ export function MemberResults({
 
   const detail = data.data;
   const { standing, competition, weeks, outsideWindow } = detail;
+  const allPosts = [...weeks.flatMap((group) => group.posts), ...outsideWindow];
 
   return (
     <>
@@ -136,7 +217,9 @@ export function MemberResults({
       )}
 
       {!competition ? (
-        <p className="lede">No challenge is running, so there&rsquo;s nothing scored yet.</p>
+        <p className="lede">
+          No challenge is running yet. Your LinkedIn results will still sync and appear below.
+        </p>
       ) : (
         <>
           <p className="lede">
@@ -185,20 +268,10 @@ export function MemberResults({
             ))
           )}
 
-          {outsideWindow.length > 0 && (
-            <>
-              <h2>Outside the window</h2>
-              <p className="small muted">
-                We hold analytics for these, but they fall outside {competition.name} and score
-                nothing.
-              </p>
-              {outsideWindow.map((post) => (
-                <Post key={post.id} post={post} />
-              ))}
-            </>
-          )}
         </>
       )}
+
+      <PostExplorer posts={allPosts} />
     </>
   );
 }
