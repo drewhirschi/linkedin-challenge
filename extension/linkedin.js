@@ -189,7 +189,16 @@ function extractCommentary(update) {
     update.text?.text ||
     (typeof update.commentary === "string" ? update.commentary : null);
   if (!text) return null;
-  return String(text).slice(0, 280);
+  return truncatePreview(text);
+}
+
+export function truncatePreview(text) {
+  // Slice by Unicode code points, not UTF-16 code units. A code-unit slice can split an emoji's
+  // surrogate pair at the boundary; JSON.stringify then emits a lone `\udxxx` escape that strict
+  // server parsers reject. `toWellFormed` also replaces any malformed surrogate already present
+  // in LinkedIn's response.
+  const wellFormed = String(text).toWellFormed();
+  return Array.from(wellFormed).slice(0, 280).join("");
 }
 
 // Post creation time, derived from the activity URN rather than from a response field.
