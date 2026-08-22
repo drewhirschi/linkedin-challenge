@@ -29,10 +29,19 @@ Then, from the repository root:
 
 ```sh
 just doctor             # verify local tools
-just dev                # server with reloads at http://localhost:3312
+just dev                # local file DB + server reloads at http://localhost:3312
 just extension-dev      # extension/dist/unpacked, baked for that local server
 just check              # build, typecheck, and tests
 ```
+
+`just dev` idempotently creates one empty local account, without challenges or fake LinkedIn data:
+
+```text
+drew@local.test / localpassword
+```
+
+The database is `server/linkedin.db`. To create the account without starting the server, run
+`just seed-local`.
 
 Load `extension/dist/unpacked/` from `chrome://extensions`. After an extension change, rerun
 `just extension-dev` and click **Reload** on the extension card.

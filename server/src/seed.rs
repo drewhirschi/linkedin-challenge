@@ -3,13 +3,59 @@
 
 use toasty::Db;
 
+use crate::auth::{hash_password, member_by_email};
 use crate::models::{Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot};
 use crate::scoring::ScoringConfig;
-use crate::auth::hash_password;
 use crate::util::{new_bearer_token, now_unix};
 
 /// Shared password for every seeded demo account.
 pub const DEMO_PASSWORD: &str = "demopassword";
+
+/// Predictable credentials for the local development account. Never enable this seed in a
+/// deployed environment.
+pub const LOCAL_EMAIL: &str = "drew@local.test";
+pub const LOCAL_PASSWORD: &str = "localpassword";
+
+/// Create one empty local organization and account, with no challenges or synthetic LinkedIn
+/// data. Idempotent by email so restarting the development server never resets real synced data.
+pub async fn seed_local_account(db: &mut Db) -> toasty::Result<()> {
+    if member_by_email(&mut *db, LOCAL_EMAIL).await?.is_some() {
+        return Ok(());
+    }
+
+    let now = now_unix();
+    let org = match Org::filter_by_slug("local").first().exec(&mut *db).await? {
+        Some(org) => org,
+        None => {
+            toasty::create!(Org {
+                slug: "local",
+                name: "Local Development",
+                created_at: now,
+            })
+            .exec(&mut *db)
+            .await?
+        }
+    };
+
+    let (_unused, token_hash) = new_bearer_token();
+    toasty::create!(Member {
+        org_id: org.id,
+        display_name: "Drew",
+        linkedin_urn: format!("pending:{LOCAL_EMAIL}"),
+        public_identifier: "",
+        profile_url: None,
+        is_admin: true,
+        is_system_admin: false,
+        email: Some(LOCAL_EMAIL.to_string()),
+        password_hash: Some(hash_password(LOCAL_PASSWORD)),
+        api_token_hash: token_hash,
+        created_at: now,
+    })
+    .exec(&mut *db)
+    .await?;
+
+    Ok(())
+}
 
 /// (display_name, follower_start, follower_now, views_start, views_now, posts)
 /// posts: (day_offset_from_start, reactions, comments, reposts, impressions)

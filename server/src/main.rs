@@ -2,6 +2,7 @@
 //!
 //! Run with `cargo dev`. Env:
 //!   DATABASE_URL  connection string (default `turso:linkedin.db` — a local libsql file)
+//!   SEED_LOCAL=1  seed one empty local account (no challenges or fake LinkedIn data)
 //!   SEED_DEMO=1   seed a populated "Demo Corp" leaderboard on first run
 //!   PORT          bind port (default 3312)
 
@@ -17,6 +18,13 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     let db = models::connect().await;
+
+    if std::env::var("SEED_LOCAL").is_ok() {
+        let mut seed_db = db.clone();
+        seed::seed_local_account(&mut seed_db)
+            .await
+            .expect("failed to seed local account");
+    }
 
     if std::env::var("SEED_DEMO").is_ok() {
         let mut seed_db = db.clone();

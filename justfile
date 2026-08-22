@@ -16,9 +16,13 @@ doctor:
     @command -v zip >/dev/null || { echo "missing: zip" >&2; exit 1; }
     @echo "development tools are ready"
 
-# Run the web/API server at http://localhost:3312 with reloads.
+# Run the web/API server with the empty local account at http://localhost:3312.
 dev:
-    cd server && cargo dev
+    cd server && DATABASE_URL=turso:linkedin.db SEED_LOCAL=1 cargo dev
+
+# Create the empty local account without starting the server.
+seed-local:
+    cd server && DATABASE_URL=turso:linkedin.db cargo run --bin seed-local
 
 # Build the stable unpacked Chrome extension directory for the local server.
 extension-dev:

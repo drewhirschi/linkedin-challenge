@@ -12,10 +12,17 @@ Ported from Topcoat; see [MIGRATION.md](../MIGRATION.md) for what moved where an
 ```sh
 cargo install cargo-nextrs-dev      # one-time, the `cargo dev` watcher
 cd client && npm install && cd ..   # one-time, the bundler resolves imports from here
-SEED_DEMO=1 cargo dev               # http://127.0.0.1:3000, with a populated "Demo Corp" leaderboard
+SEED_LOCAL=1 cargo dev              # http://localhost:3312, one empty local account
 ```
 
-Or without the watcher: `SEED_DEMO=1 cargo run`.
+Or use `just dev` from the repository root, which selects the local file database and local seed.
+
+The empty local account has no challenges or fake LinkedIn data:
+
+- `drew@local.test` / `localpassword`
+
+Run `just seed-local` to create it without starting the server. The seed is idempotent and never
+overwrites data synced from LinkedIn.
 
 Everything requires a session, so start at `/login`. The demo seed creates accounts you can use
 (password `demopassword` for all of them):
