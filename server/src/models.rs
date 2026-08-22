@@ -65,6 +65,11 @@ pub async fn connect() -> Db {
         "CREATE UNIQUE INDEX IF NOT EXISTS challenge_memberships_challenge_member ON challenge_memberships (challenge_id, member_id)",
     )
     .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE challenge_memberships ADD COLUMN is_favorite BOOLEAN NOT NULL DEFAULT FALSE",
+    )
+    .await;
     // Only rows predating challenge ownership have creator_id = 0. Backfill their former org
     // participants once; future challenges use explicit memberships and are never touched here.
     execute_migration(
@@ -230,6 +235,7 @@ pub struct ChallengeMembership {
     pub challenge_id: i64,
     #[index]
     pub member_id: i64,
+    pub is_favorite: bool,
     pub joined_at: i64,
 }
 

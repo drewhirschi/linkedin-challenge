@@ -47,6 +47,9 @@ a:hover { text-decoration: underline; }
 }
 .nav-link:hover { background: var(--bg); text-decoration: none; }
 .nav-link.active { background: #e8f0fa; color: var(--brand-dark); font-weight: 600; }
+.nav-link.nested { margin-left: 14px; padding-top: 7px; padding-bottom: 7px; font-size: 13px; }
+.challenge-nav { display: grid; gap: 2px; }
+.favorite-button { font-size: 20px; line-height: 1; min-width: 36px; }
 .nav-section {
   margin: 16px 10px 4px; font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em; color: var(--muted);

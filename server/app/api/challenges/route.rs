@@ -76,6 +76,7 @@ pub async fn post(
     toasty::create!(ChallengeMembership {
         challenge_id: challenge.id,
         member_id: creator.id,
+        is_favorite: true,
         joined_at: now_unix(),
     }).exec(&mut db).await?;
     Ok(Json(CreateChallengeResponse { id: challenge.id }))

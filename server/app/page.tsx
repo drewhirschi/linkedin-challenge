@@ -43,11 +43,12 @@ function AdminStrip({ challengeId, enabled }: { challengeId: number; enabled: bo
   );
 }
 
-export default function LeaderboardPage() {
+export function ChallengeLeaderboard({ fixedChallengeId }: { fixedChallengeId?: number }) {
   // undefined = "whatever the org's current challenge is"; a number = an explicit pick.
   const [challengeId, setChallengeId] = useState<number | undefined>(undefined);
+  const selectedChallengeId = fixedChallengeId ?? challengeId;
   const { data, isLoading } = useGetLeaderboard(
-    challengeId !== undefined ? { challengeId } : undefined,
+    selectedChallengeId !== undefined ? { challengeId: selectedChallengeId } : undefined,
   );
   const { data: meData } = useGetMe();
   const me = meData?.status === 200 ? meData.data : undefined;
@@ -86,7 +87,7 @@ export default function LeaderboardPage() {
     <>
       <div className="week-head">
         <h1 style={{ margin: 0 }}>{competition.name}</h1>
-        {challenges.length > 1 && (
+        {fixedChallengeId === undefined && challenges.length > 1 && (
           <select
             value={competition.id}
             onChange={(e) => setChallengeId(Number(e.target.value))}
@@ -109,10 +110,10 @@ export default function LeaderboardPage() {
           </>
         )}
         {" · "}
-        <a href="/rules">How scoring works</a>
+        <a href={`/challenges/${competition.id}/scoring`}>How scoring works</a>
       </p>
 
-      <AdminStrip challengeId={competition.id} enabled={Boolean(me?.isAdmin)} />
+      <AdminStrip challengeId={competition.id} enabled={competition.isOwner} />
 
       <div className="panel" style={{ marginTop: 16, padding: 0, overflow: "hidden" }}>
         {standings.length === 0 ? (
@@ -141,9 +142,7 @@ export default function LeaderboardPage() {
                     <a
                       className="who"
                       href={
-                        row.memberId === me?.memberId
-                          ? "/me"
-                          : `/members/${row.memberId}?challengeId=${competition.id}`
+                        `/members/${row.memberId}?challengeId=${competition.id}`
                       }
                     >
                       <span className="avatar">{initials(row.displayName)}</span>
@@ -178,4 +177,8 @@ export default function LeaderboardPage() {
       </p>
     </>
   );
+}
+
+export default function LeaderboardPage() {
+  return <ChallengeLeaderboard />;
 }

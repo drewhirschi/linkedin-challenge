@@ -185,6 +185,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
     toasty::create!(ChallengeMembership {
         challenge_id: competition.id,
         member_id: admin.id,
+        is_favorite: true,
         joined_at: now,
     }).exec(&mut *db).await?;
 
@@ -232,6 +233,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
         toasty::create!(ChallengeMembership {
             challenge_id: competition.id,
             member_id: member.id,
+            is_favorite: false,
             joined_at: now,
         }).exec(&mut *db).await?;
 

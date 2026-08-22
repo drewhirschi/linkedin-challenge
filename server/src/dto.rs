@@ -26,6 +26,8 @@ pub struct CompetitionInfo {
     pub start_at: i64,
     pub end_at: i64,
     pub is_active: bool,
+    pub is_favorite: bool,
+    pub is_owner: bool,
     /// The scoring rules in force — this is what the "how the challenge is configured" screen reads.
     pub config: ScoringConfig,
 }
@@ -38,6 +40,8 @@ impl CompetitionInfo {
             start_at: c.start_at,
             end_at: c.end_at,
             is_active: c.is_active,
+            is_favorite: false,
+            is_owner: false,
             config: ScoringConfig::from_competition(c),
         }
     }
@@ -327,10 +331,27 @@ pub async fn member_challenge(db: &mut Db, member_id: i64, id: i64) -> ApiResult
 /// The org's challenge list plus the default one to display.
 pub async fn challenge_list(db: &mut Db, member: &Member) -> ApiResult<ChallengeList> {
     let comps = member_challenges(db, member.id).await?;
-    let infos: Vec<CompetitionInfo> = comps.iter().map(CompetitionInfo::new).collect();
+    let memberships = ChallengeMembership::filter(
+        ChallengeMembership::fields().member_id().eq(member.id),
+    ).exec(&mut *db).await?;
+    let infos: Vec<CompetitionInfo> = comps.iter().map(|challenge| {
+        let mut info = CompetitionInfo::new(challenge);
+        info.is_owner = challenge.creator_id == member.id;
+        info.is_favorite = memberships.iter().any(|membership| {
+            membership.challenge_id == challenge.id && membership.is_favorite
+        });
+        info
+    }).collect();
     let current = active_competition(comps, now_unix());
     Ok(ChallengeList {
-        current: current.as_ref().map(CompetitionInfo::new),
+        current: current.as_ref().map(|challenge| {
+            let mut info = CompetitionInfo::new(challenge);
+            info.is_owner = challenge.creator_id == member.id;
+            info.is_favorite = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.is_favorite
+            });
+            info
+        }),
         challenges: infos,
     })
 }
@@ -343,7 +364,17 @@ pub async fn leaderboard(
     challenge_id: Option<i64>,
 ) -> ApiResult<Leaderboard> {
     let comps = member_challenges(db, member.id).await?;
-    let challenges: Vec<CompetitionInfo> = comps.iter().map(CompetitionInfo::new).collect();
+    let memberships = ChallengeMembership::filter(
+        ChallengeMembership::fields().member_id().eq(member.id),
+    ).exec(&mut *db).await?;
+    let challenges: Vec<CompetitionInfo> = comps.iter().map(|challenge| {
+        let mut info = CompetitionInfo::new(challenge);
+        info.is_owner = challenge.creator_id == member.id;
+        info.is_favorite = memberships.iter().any(|membership| {
+            membership.challenge_id == challenge.id && membership.is_favorite
+        });
+        info
+    }).collect();
 
     let comp = match challenge_id {
         Some(id) => Some(member_challenge(db, member.id, id).await?),
@@ -356,7 +387,14 @@ pub async fn leaderboard(
     };
 
     Ok(Leaderboard {
-        competition: comp.as_ref().map(CompetitionInfo::new),
+        competition: comp.as_ref().map(|challenge| {
+            let mut info = CompetitionInfo::new(challenge);
+            info.is_owner = challenge.creator_id == member.id;
+            info.is_favorite = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.is_favorite
+            });
+            info
+        }),
         challenges,
         standings,
         aggregate: None,

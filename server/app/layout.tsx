@@ -6,7 +6,7 @@
 // plus Admin for the people running the challenge and System for the product operator.
 import { Component, type ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { useGetMe, useLogout, useStopImpersonation } from "@linkedin-challenge/client/react-query";
+import { useGetChallenges, useGetMe, useLogout, useStopImpersonation } from "@linkedin-challenge/client/react-query";
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 
 function NavLink({ href, pathname }: { href: string; pathname: string }) {
@@ -19,6 +19,11 @@ function NavLink({ href, pathname }: { href: string; pathname: string }) {
       {label(href)}
     </a>
   );
+}
+
+function SideLink({ href, pathname, children, nested = false }: { href: string; pathname: string; children: ReactNode; nested?: boolean }) {
+  const active = pathname === href;
+  return <a className={`nav-link${nested ? " nested" : ""}${active ? " active" : ""}`} href={href}>{children}</a>;
 }
 
 const LABELS: Record<string, string> = {
@@ -63,15 +68,17 @@ function Sidebar() {
   // Unseeded on purpose: session state is per-viewer, so seeding it into the streamed HTML would
   // make the page uncacheable for no gain.
   const { data } = useGetMe();
+  const { data: challengeData } = useGetChallenges({ query: { enabled: Boolean(data?.status === 200 && data.data.signedIn) } });
   const me = data?.status === 200 ? data.data : undefined;
   const logout = useLogout();
   const stopImpersonation = useStopImpersonation();
+  const challenges = challengeData?.status === 200 ? challengeData.data.challenges : [];
 
   if (!me?.signedIn) return null;
 
   return (
     <aside className="sidebar">
-      <a href="/" className="brand">
+      <a href="/me" className="brand">
         <span className="mark">in</span>
         <span className="brand-name">{me.orgName ?? "Challenge"}</span>
       </a>
@@ -80,19 +87,31 @@ function Sidebar() {
         <PathnameProvider>
           {(pathname) => (
             <>
-              <NavLink href="/" pathname={pathname} />
-              <NavLink href="/me" pathname={pathname} />
-              <NavLink href="/challenges" pathname={pathname} />
-              <NavLink href="/rules" pathname={pathname} />
-
-              {me.isAdmin && (
-                <>
-                  <div className="nav-section">Manage</div>
-                  <NavLink href="/admin" pathname={pathname} />
-                  <NavLink href="/admin/challenges" pathname={pathname} />
-                  <NavLink href="/admin/invites" pathname={pathname} />
-                </>
-              )}
+              <SideLink href="/me" pathname={pathname}>My posts</SideLink>
+              <div className="nav-section">Challenges</div>
+              <SideLink href="/challenges" pathname={pathname}>All challenges</SideLink>
+              {challenges.filter((challenge) => challenge.isFavorite || pathname.startsWith(`/challenges/${challenge.id}`)).map((challenge) => {
+                const base = `/challenges/${challenge.id}`;
+                const open = pathname === base || pathname.startsWith(`${base}/`);
+                return (
+                  <div className="challenge-nav" key={challenge.id}>
+                    <SideLink href={base} pathname={pathname}>{challenge.name}</SideLink>
+                    {open && (
+                      <>
+                        <SideLink href={base} pathname={pathname} nested>Leaderboard</SideLink>
+                        <SideLink href={`${base}/scoring`} pathname={pathname} nested>How scoring works</SideLink>
+                        {challenge.isOwner && (
+                          <>
+                            <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>
+                            <SideLink href={`${base}/manage`} pathname={pathname} nested>Management</SideLink>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+              <SideLink href="/admin/challenges" pathname={pathname}>Create a challenge</SideLink>
 
               {me.isSystemAdmin && (
                 <>

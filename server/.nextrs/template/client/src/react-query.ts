@@ -16,3 +16,4 @@ export * from "./generated/react-query";
 // point without editing generated output.
 export { useCreateChallenge } from "./generated/react-query/challenges/challenges";
 export { useCreateInvites } from "./generated/react-query/invites/invites";
+export { useSetChallengeFavorite } from "./generated/react-query/favorite/favorite";

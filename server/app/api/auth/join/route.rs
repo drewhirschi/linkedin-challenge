@@ -114,6 +114,7 @@ pub async fn post(
         toasty::create!(ChallengeMembership {
             challenge_id: challenge.id,
             member_id: member.id,
+            is_favorite: false,
             joined_at: now_unix(),
         })
         .exec(&mut db)
