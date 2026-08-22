@@ -8,11 +8,11 @@ use linkedin_challenge_server::auth::{SESSION_COOKIE, cookie};
 use nextrs::conventions::MiddlewareResult;
 
 /// Reachable without a session:
-///  * the sign-in surfaces under /auth, or nobody could ever get in;
+///  * the login page, which is the only account entry point for now;
 ///  * the auth API those surfaces post to;
 ///  * the extension protocol, which authenticates with a bearer sync token instead of the cookie.
 fn is_public(path: &str) -> bool {
-    matches!(path, "/auth/login" | "/auth/join" | "/auth/signup")
+    path == "/auth/login"
         || path.starts_with("/api/auth/")
         // Liveness must answer without a session, or a load balancer sees a redirect.
         || path == "/api/health"
@@ -26,6 +26,11 @@ fn is_public(path: &str) -> bool {
 
 pub async fn handle(req: http::Request<axum::body::Body>) -> MiddlewareResult {
     let path = req.uri().path().to_string();
+    // Account creation and invite redemption are intentionally dormant during the login-only
+    // phase. Keep their implementations for later, but do not expose parallel entry points.
+    if matches!(path.as_str(), "/auth/join" | "/auth/signup") {
+        return MiddlewareResult::response(Redirect::to("/auth/login").into_response());
+    }
     if is_public(&path) {
         return MiddlewareResult::next(req);
     }
