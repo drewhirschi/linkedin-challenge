@@ -3,18 +3,21 @@
 // the leaderboard drill-in — the manifest wants those to be the same view of the same data.
 import { useGetMemberDetail } from "@linkedin-challenge/client/react-query";
 import type { PostStat, WeekGroup } from "@linkedin-challenge/client";
-import { useMemo, useState } from "react";
+import { debounce, parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
+import { useEffect, useMemo } from "react";
 import { fmtInt, fmtNum, fmtDate, initials } from "./format";
 
-type PostSort =
-  | "newest"
-  | "oldest"
-  | "impressions"
-  | "reactions"
-  | "comments"
-  | "reposts"
-  | "sends"
-  | "saves";
+const PAGE_SIZE = 50;
+const POST_SORTS = [
+  "newest",
+  "oldest",
+  "impressions",
+  "reactions",
+  "comments",
+  "reposts",
+  "sends",
+  "saves",
+] as const;
 
 function Metric({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
@@ -30,6 +33,7 @@ function Post({ post }: { post: PostStat }) {
   const total = post.impressionsInNetwork + post.impressionsOutOfNetwork;
   return (
     <div className="post">
+      {post.isRepost && <span className="post-kind">Repost</span>}
       <p className="post-text">{post.textPreview || <span className="muted">(no preview)</span>}</p>
       <div className="metrics">
         <Metric label="Impressions" value={post.impressions} />
@@ -45,7 +49,7 @@ function Post({ post }: { post: PostStat }) {
         <Metric label="Sends" value={post.sends} />
         <Metric label="Saves" value={post.saves} />
       </div>
-      {(total > 0 || post.profileViewersFromPost > 0 || post.followersFromPost > 0) && (
+      {(total > 0 || post.membersReached > 0 || post.profileViewersFromPost > 0 || post.followersFromPost > 0) && (
         <div className="metrics" style={{ marginTop: 8 }}>
           {total > 0 && (
             <>
@@ -61,6 +65,7 @@ function Post({ post }: { post: PostStat }) {
               />
             </>
           )}
+          <Metric label="Members reached" value={post.membersReached} />
           <Metric label="Profile views from post" value={post.profileViewersFromPost} />
           <Metric label="Followers from post" value={post.followersFromPost} />
         </div>
@@ -100,22 +105,32 @@ function Week({ group, gradedPerWeek }: { group: WeekGroup; gradedPerWeek: numbe
 }
 
 function PostExplorer({ posts }: { posts: PostStat[] }) {
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<PostSort>("newest");
-  const shown = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    const filtered = needle
+  const [{ filter, sort, page }, setParams] = useQueryStates({
+    filter: parseAsString.withDefault(""),
+    sort: parseAsStringLiteral(POST_SORTS).withDefault("newest"),
+    page: parseAsInteger.withDefault(1),
+  });
+  const filtered = useMemo(() => {
+    const needle = filter.trim().toLocaleLowerCase();
+    const matching = needle
       ? posts.filter((post) => post.textPreview?.toLocaleLowerCase().includes(needle))
       : posts;
     const direction = sort === "oldest" ? 1 : -1;
-    return [...filtered].sort((a, b) => {
+    return [...matching].sort((a, b) => {
       if (sort === "newest" || sort === "oldest") {
         return direction * (a.postedAt - b.postedAt);
       }
       const difference = b[sort] - a[sort];
       return difference || b.postedAt - a.postedAt;
     });
-  }, [posts, query, sort]);
+  }, [posts, filter, sort]);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, page), pageCount);
+  const shown = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (page !== currentPage) void setParams({ page: currentPage });
+  }, [page, currentPage, setParams]);
 
   return (
     <section className="post-explorer">
@@ -123,9 +138,9 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
         <div>
           <h2>Synced posts</h2>
           <p className="small muted">
-            {shown.length === posts.length
+            {filtered.length === posts.length
               ? `${posts.length} post${posts.length === 1 ? "" : "s"}`
-              : `${shown.length} of ${posts.length} posts`}
+              : `${filtered.length} of ${posts.length} posts`}
           </p>
         </div>
         <div className="post-controls">
@@ -133,14 +148,24 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
             <span>Filter posts</span>
             <input
               type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              value={filter}
+              onChange={(event) => {
+                void setParams(
+                  { filter: event.target.value, page: 1 },
+                  { limitUrlUpdates: debounce(300) },
+                );
+              }}
               placeholder="Search post text"
             />
           </label>
           <label>
             <span>Sort by</span>
-            <select value={sort} onChange={(event) => setSort(event.target.value as PostSort)}>
+            <select
+              value={sort}
+              onChange={(event) => {
+                void setParams({ sort: event.target.value as (typeof POST_SORTS)[number], page: 1 });
+              }}
+            >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
               <option value="impressions">Most impressions</option>
@@ -163,6 +188,27 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
             <Post key={post.id} post={post} />
           ))}
         </div>
+      )}
+      {pageCount > 1 && (
+        <nav className="pagination" aria-label="Synced posts pages">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => void setParams({ page: currentPage - 1 })}
+          >
+            Previous
+          </button>
+          <span className="small muted">
+            Page {currentPage} of {pageCount}
+          </span>
+          <button
+            type="button"
+            disabled={currentPage === pageCount}
+            onClick={() => void setParams({ page: currentPage + 1 })}
+          >
+            Next
+          </button>
+        </nav>
       )}
     </section>
   );

@@ -7,6 +7,7 @@
 import { Component, type ReactNode } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { useGetMe, useLogout, useStopImpersonation } from "@linkedin-challenge/client/react-query";
+import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 
 function NavLink({ href, pathname }: { href: string; pathname: string }) {
   // Prefix-match so /admin/challenges lights "Challenge setup"; exact-match "/" and "/admin" so
@@ -155,10 +156,12 @@ export default function Layout({ children }: { children: ReactNode }) {
       <link rel="stylesheet" href="/style.css" />
       <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       <link rel="icon" href="/favicon.ico" sizes="32x32" />
-      <div className="shell">
-        <Sidebar />
-        <main>{children}</main>
-      </div>
+      <NuqsAdapter>
+        <div className="shell">
+          <Sidebar />
+          <main>{children}</main>
+        </div>
+      </NuqsAdapter>
     </>
   );
 }

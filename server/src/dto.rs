@@ -117,6 +117,7 @@ pub struct PostStat {
     /// Post creation time, or the first snapshot's time when LinkedIn didn't give us one.
     pub posted_at: i64,
     pub text_preview: Option<String>,
+    pub is_repost: bool,
     pub impressions: i64,
     pub reactions: i64,
     /// LinkedIn's total comment count.
@@ -129,6 +130,7 @@ pub struct PostStat {
     pub saves: i64,
     pub impressions_in_network: i64,
     pub impressions_out_of_network: i64,
+    pub members_reached: i64,
     pub profile_viewers_from_post: i64,
     pub followers_from_post: i64,
     /// False when the post falls outside the competition window.
@@ -420,6 +422,7 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
             permalink: post.permalink.clone(),
             posted_at,
             text_preview: post.text_preview.clone(),
+            is_repost: post.is_repost,
             impressions: latest.and_then(|s| s.impressions).unwrap_or(0),
             reactions: latest.and_then(|s| s.reactions).unwrap_or(0),
             comments: latest.and_then(|s| s.comments).unwrap_or(0),
@@ -431,6 +434,7 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
             impressions_out_of_network: latest
                 .and_then(|s| s.impressions_out_of_network)
                 .unwrap_or(0),
+            members_reached: latest.and_then(|s| s.members_reached).unwrap_or(0),
             profile_viewers_from_post: latest
                 .and_then(|s| s.profile_viewers_from_post)
                 .unwrap_or(0),
@@ -534,6 +538,7 @@ fn clone_stat(s: &PostStat) -> PostStat {
         permalink: s.permalink.clone(),
         posted_at: s.posted_at,
         text_preview: s.text_preview.clone(),
+        is_repost: s.is_repost,
         impressions: s.impressions,
         reactions: s.reactions,
         comments: s.comments,
@@ -543,6 +548,7 @@ fn clone_stat(s: &PostStat) -> PostStat {
         saves: s.saves,
         impressions_in_network: s.impressions_in_network,
         impressions_out_of_network: s.impressions_out_of_network,
+        members_reached: s.members_reached,
         profile_viewers_from_post: s.profile_viewers_from_post,
         followers_from_post: s.followers_from_post,
         in_window: s.in_window,

@@ -211,6 +211,7 @@ export type MetricsFollowersFromPost = number | null;
 export type MetricsImpressions = number | null;
 export type MetricsImpressionsInNetwork = number | null;
 export type MetricsImpressionsOutOfNetwork = number | null;
+export type MetricsMembersReached = number | null;
 export type MetricsProfileViewersFromPost = number | null;
 export type MetricsReactions = number | null;
 export type MetricsReposts = number | null;
@@ -222,6 +223,7 @@ export interface Metrics {
     impressions?: MetricsImpressions;
     impressionsInNetwork?: MetricsImpressionsInNetwork;
     impressionsOutOfNetwork?: MetricsImpressionsOutOfNetwork;
+    membersReached?: MetricsMembersReached;
     profileViewersFromPost?: MetricsProfileViewersFromPost;
     reactions?: MetricsReactions;
     reposts?: MetricsReposts;
@@ -239,6 +241,7 @@ export interface PostPayload {
   didn't read any this time — it is not a claim that the post has none. */
     comments?: CommentPayload[];
     createdAt?: PostPayloadCreatedAt;
+    isRepost?: boolean;
     metrics: Metrics;
     permalink: string;
     textPreview?: PostPayloadTextPreview;
@@ -258,6 +261,8 @@ export interface PostStat {
     impressionsOutOfNetwork: number;
     /** False when the post falls outside the competition window. */
     inWindow: boolean;
+    isRepost: boolean;
+    membersReached: number;
     permalink: string;
     /** Post creation time, or the first snapshot's time when LinkedIn didn't give us one. */
     postedAt: number;
@@ -348,6 +353,8 @@ export interface StopImpersonationResponse {
 export type SyncRequestCapturedAt = string | null;
 export interface SyncRequest {
     capturedAt?: SyncRequestCapturedAt;
+    /** Nested originals included in normalized reshare responses, but not authored by this member. */
+    excludedPostUrns?: string[];
     posts: PostPayload[];
     profile: ProfilePayload;
 }

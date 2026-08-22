@@ -32,7 +32,30 @@ pub async fn connect() -> Db {
             .expect("failed to create database schema");
     }
 
+    // Toasty creates fresh schemas but does not yet evolve existing ones. Keep the tiny additive
+    // migrations here so a development database and a deployed PostgreSQL database retain their
+    // accounts and sync history as optional analytics fields are introduced.
+    add_column(
+        &mut db,
+        "ALTER TABLE posts ADD COLUMN is_repost BOOLEAN NOT NULL DEFAULT FALSE",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE post_snapshots ADD COLUMN members_reached BIGINT",
+    )
+    .await;
+
     db
+}
+
+async fn add_column(db: &mut Db, sql: &str) {
+    if let Err(error) = toasty::sql::statement(sql).exec(db).await {
+        let message = error.to_string().to_ascii_lowercase();
+        if !message.contains("duplicate column") && !message.contains("already exists") {
+            panic!("failed to apply database migration `{sql}`: {error}");
+        }
+    }
 }
 
 /// A company running challenges.
@@ -166,6 +189,7 @@ pub struct Post {
     /// LinkedIn post creation time (unix secs); 0 when unknown — bucket by first snapshot then.
     pub created_at: i64,
     pub text_preview: Option<String>,
+    pub is_repost: bool,
 
     #[has_many]
     pub snapshots: toasty::Deferred<Vec<PostSnapshot>>,
@@ -199,6 +223,7 @@ pub struct PostSnapshot {
     // All optional: a sync that couldn't read them stores None rather than a misleading zero.
     pub impressions_in_network: Option<i64>,
     pub impressions_out_of_network: Option<i64>,
+    pub members_reached: Option<i64>,
     pub profile_viewers_from_post: Option<i64>,
     pub followers_from_post: Option<i64>,
 }

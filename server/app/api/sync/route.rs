@@ -19,6 +19,9 @@ pub struct SyncRequest {
     pub captured_at: Option<String>,
     pub profile: ProfilePayload,
     pub posts: Vec<PostPayload>,
+    /// Nested originals included in normalized reshare responses, but not authored by this member.
+    #[serde(default)]
+    pub excluded_post_urns: Vec<String>,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -35,6 +38,8 @@ pub struct PostPayload {
     pub permalink: String,
     pub created_at: Option<String>,
     pub text_preview: Option<String>,
+    #[serde(default)]
+    pub is_repost: bool,
     pub metrics: Metrics,
     /// Comments the extension could read, with their authors. Absent or empty simply means we
     /// didn't read any this time — it is not a claim that the post has none.
@@ -62,6 +67,7 @@ pub struct Metrics {
     pub saves: Option<i64>,
     pub impressions_in_network: Option<i64>,
     pub impressions_out_of_network: Option<i64>,
+    pub members_reached: Option<i64>,
     pub profile_viewers_from_post: Option<i64>,
     pub followers_from_post: Option<i64>,
 }
@@ -102,6 +108,26 @@ pub async fn post(
     .exec(&mut db)
     .await?;
 
+    // Older extension builds treated normalized entities nested under a reshare as separate posts.
+    // Reconcile only explicit nested URNs, and only when the stored post belongs to this member.
+    for urn in &req.excluded_post_urns {
+        let Some(post) = Post::filter_by_urn(urn).first().exec(&mut db).await? else {
+            continue;
+        };
+        if post.member_id != member.id {
+            continue;
+        }
+        PostComment::filter(PostComment::fields().post_id().eq(post.id))
+            .delete()
+            .exec(&mut db)
+            .await?;
+        PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post.id))
+            .delete()
+            .exec(&mut db)
+            .await?;
+        Post::filter_by_id(post.id).delete().exec(&mut db).await?;
+    }
+
     // Upsert each post by URN, then append a metric snapshot.
     let mut ingested = 0usize;
     for p in &req.posts {
@@ -114,14 +140,21 @@ pub async fn post(
                 // Backfill a creation time we didn't have before. Posts ingested while the
                 // extension couldn't determine one are stored with 0 and fall back to "first
                 // snapshot", which reads as "posted today"; a later sync repairs them in place.
-                if post.created_at == 0
-                    && let Some(created_at) = p.created_at.as_deref().and_then(parse_iso8601)
-                    && created_at > 0
-                {
-                    toasty::update!(Post::filter_by_id(post.id) { created_at })
-                        .exec(&mut db)
-                        .await?;
-                }
+                let created_at = if post.created_at == 0 {
+                    p.created_at
+                        .as_deref()
+                        .and_then(parse_iso8601)
+                        .filter(|created_at| *created_at > 0)
+                        .unwrap_or(post.created_at)
+                } else {
+                    post.created_at
+                };
+                toasty::update!(Post::filter_by_id(post.id) {
+                    created_at,
+                    is_repost: p.is_repost,
+                })
+                .exec(&mut db)
+                .await?;
                 post.id
             }
             None => {
@@ -132,6 +165,7 @@ pub async fn post(
                     permalink: &p.permalink,
                     created_at,
                     text_preview: p.text_preview.clone(),
+                    is_repost: p.is_repost,
                 })
                 .exec(&mut db)
                 .await?;
@@ -150,6 +184,7 @@ pub async fn post(
             saves: p.metrics.saves,
             impressions_in_network: p.metrics.impressions_in_network,
             impressions_out_of_network: p.metrics.impressions_out_of_network,
+            members_reached: p.metrics.members_reached,
             profile_viewers_from_post: p.metrics.profile_viewers_from_post,
             followers_from_post: p.metrics.followers_from_post,
         })

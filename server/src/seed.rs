@@ -248,6 +248,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
                 permalink: format!("https://www.linkedin.com/feed/update/urn:li:activity:demo{idx}-{i}/"),
                 created_at: created,
                 text_preview: Some(format!("{name}'s post #{}", i + 1)),
+                is_repost: false,
             })
             .exec(&mut *db)
             .await?;
@@ -265,6 +266,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
                 saves: Some(comments / 2),
                 impressions_in_network: Some(impressions * 7 / 10),
                 impressions_out_of_network: Some(impressions * 3 / 10),
+                members_reached: Some(impressions * 4 / 5),
                 profile_viewers_from_post: Some(reactions / 4),
                 followers_from_post: Some(reactions / 10),
             })

@@ -41,6 +41,21 @@ async function voyagerFetch(path) {
   return res.json();
 }
 
+async function linkedinFetch(path, init = {}) {
+  const token = await csrfToken();
+  const res = await fetch(`${LINKEDIN_ORIGIN}${path}`, {
+    credentials: "include",
+    ...init,
+    headers: {
+      "csrf-token": token,
+      ...(init.headers || {}),
+    },
+  });
+  if (res.status === 401 || res.status === 403) throw new Error("NOT_LOGGED_IN");
+  if (!res.ok) throw new Error(`LINKEDIN_${res.status}`);
+  return res;
+}
+
 // Voyager returns a normalized envelope: { data, included: [ ...entities ] }.
 // Helpers to dig through `included` tolerantly.
 const included = (json) => (json && Array.isArray(json.included) ? json.included : []);
@@ -116,10 +131,128 @@ export async function getPosts(memberUrn) {
   return (await getPostFeed(memberUrn)).posts;
 }
 
+function activityId(activityUrn) {
+  return String(activityUrn || "").match(/urn:li:activity:(\d+)/)?.[1] || null;
+}
+
+function metricValues(fragment) {
+  return [
+    ...fragment.matchAll(/>([\d][\d,.]*%?)</g),
+    ...fragment.matchAll(/"children":\["([\d][\d,.]*%?)"\]/g),
+  ]
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((match) => match[1]);
+}
+
+function metricTextBefore(html, label) {
+  const at = html.indexOf(label);
+  if (at < 0) return null;
+  return metricValues(html.slice(Math.max(0, at - 700), at)).at(-1) || null;
+}
+
+function metricTextAfter(html, label) {
+  const at = html.indexOf(label);
+  if (at < 0) return null;
+  return metricValues(html.slice(at + label.length, at + label.length + 700))[0] || null;
+}
+
+function metricNumber(value) {
+  if (!value) return null;
+  const parsed = Number(String(value).replace(/[,%.]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function analyticsRequest(activityId) {
+  const requestId = "com.linkedin.sdui.requests.creatoranalytics.spaSlowMetrics";
+  const requestedArguments = {
+    $type: "proto.sdui.actions.requests.RequestedArguments",
+    requestedStateKeys: [],
+    payload: {
+      updateKey: {
+        feedType: 47,
+        items: [{
+          feedUpdateUrn: { updateUrnActivityUrn: { activityUrn: { activityId } } },
+          trackingId: "",
+        }],
+        aggregationType: 0,
+        isVideoCarousel: false,
+      },
+    },
+    requestMetadata: { $type: "proto.sdui.common.RequestMetadata" },
+  };
+  return {
+    requestId,
+    serverRequest: {
+      requestId,
+      requestedArguments,
+      requestMetadata: { $type: "proto.sdui.common.RequestMetadata" },
+      isApfcEnabled: false,
+      isStreaming: false,
+      rumPageKey: "",
+    },
+    states: [],
+    requestedArguments: {
+      ...requestedArguments,
+      states: [],
+      screenId: "com.linkedin.sdui.flagshipnav.creatoranalytics.MembersSPAContainer",
+      knownTemplateIds: [],
+    },
+  };
+}
+
+// Author-only analytics. LinkedIn's current page renders core values in its HTML response and
+// fills the reach breakdown with one RSC server action. Both requests are keyed only by the
+// activity id; cookies and CSRF stay inside this browser session.
+async function getPostAnalytics(activityUrn) {
+  const id = activityId(activityUrn);
+  if (!id) return {};
+  try {
+    const requestId = "com.linkedin.sdui.requests.creatoranalytics.spaSlowMetrics";
+    const [page, slow] = await Promise.all([
+      linkedinFetch(`/flagship-web/analytics/post-summary/${activityUrn}/`),
+      linkedinFetch(`/flagship-web/rsc-action/actions/server-request?sduiid=${requestId}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-li-rsc-stream": "true",
+        },
+        body: JSON.stringify(analyticsRequest(id)),
+      }),
+    ]);
+    const [html, stream] = await Promise.all([page.text(), slow.text()]);
+    const impressions = metricNumber(metricTextBefore(html, "Impressions"));
+    const inNetworkPercent = metricNumber(metricTextAfter(stream, "In-network (followers and connections)"));
+    const outOfNetworkPercent = metricNumber(metricTextAfter(stream, "Out-of-network"));
+    const inNetwork =
+      impressions != null && inNetworkPercent != null
+        ? Math.round((impressions * inNetworkPercent) / 100)
+        : null;
+    const outOfNetwork =
+      impressions != null && outOfNetworkPercent != null
+        ? Math.round((impressions * outOfNetworkPercent) / 100)
+        : null;
+    return Object.fromEntries(Object.entries({
+      impressions,
+      reactions: metricNumber(metricTextAfter(html, "Reactions")),
+      comments: metricNumber(metricTextAfter(html, "Comments")),
+      reposts: metricNumber(metricTextAfter(html, "Reposts")),
+      sends: metricNumber(metricTextAfter(html, "Sends on LinkedIn")),
+      saves: metricNumber(metricTextAfter(html, "Saves")),
+      impressionsInNetwork: inNetwork,
+      impressionsOutOfNetwork: outOfNetwork,
+      membersReached: metricNumber(metricTextBefore(stream, "Members reached")),
+      profileViewersFromPost: metricNumber(metricTextBefore(html, "Profile viewers from this post")),
+      followersFromPost: metricNumber(metricTextBefore(html, "Followers gained from this post")),
+    }).filter(([, value]) => value != null));
+  } catch {
+    return {};
+  }
+}
+
 // Fetch posts and the follower count that LinkedIn now includes alongside them. Keeping these in
 // one request avoids the retired `networkinfo` endpoint and matches the live response diagnostics.
 async function getPostFeed(memberUrn) {
-  if (!memberUrn) return { posts: [], followerCount: null };
+  if (!memberUrn) return { posts: [], followerCount: null, excludedPostUrns: [] };
   let json;
   try {
     json = await voyagerFetch(
@@ -127,7 +260,7 @@ async function getPostFeed(memberUrn) {
         `&profileUrn=${encodeURIComponent(memberUrn)}`
     );
   } catch {
-    return { posts: [], followerCount: null };
+    return { posts: [], followerCount: null, excludedPostUrns: [] };
   }
 
   const following = firstWith(
@@ -136,16 +269,27 @@ async function getPostFeed(memberUrn) {
   );
 
   // Updates carry commentary + a socialDetail with reaction/comment/share counts.
+  const rootUpdates = new Set(json.data?.["*elements"] || []);
   const updates = allWith(
     json,
     (e) => e && (e.$type || "").toString().toLowerCase().includes("update") && (e.metadata || e.socialDetail || e.commentary)
+  ).filter((update) =>
+    rootUpdates.size > 0
+      ? rootUpdates.has(update.entityUrn)
+      : JSON.stringify(update.actor || {}).includes(memberUrn)
   );
 
   const posts = [];
+  const excludedPostUrns = [];
   for (const u of updates) {
     const urn = u.updateMetadata?.urn || u.entityUrn || u.dashEntityUrn;
-    const activityUrn = extractActivityUrn(urn) || extractActivityUrn(JSON.stringify(u));
+    const serialized = JSON.stringify(u);
+    const activityUrn = extractActivityUrn(urn) || extractActivityUrn(serialized);
     if (!activityUrn) continue;
+    const nestedReshareUrn = extractActivityUrn(u["*resharedUpdate"]);
+    if (nestedReshareUrn && nestedReshareUrn !== activityUrn) {
+      excludedPostUrns.push(nestedReshareUrn);
+    }
 
     const social = resolveSocialDetail(json, activityUrn);
     posts.push({
@@ -153,6 +297,10 @@ async function getPostFeed(memberUrn) {
       permalink: `${LINKEDIN_ORIGIN}/feed/update/${activityUrn}/`,
       createdAt: extractCreatedAt(u, activityUrn),
       textPreview: extractCommentary(u),
+      isRepost:
+        Boolean(u["*resharedUpdate"]) ||
+        serialized.includes('"RESHARED"') ||
+        /reposted this/i.test(serialized),
       metrics: {
         impressions: social.impressions,
         reactions: social.reactions,
@@ -165,6 +313,7 @@ async function getPostFeed(memberUrn) {
   return {
     posts: dedupeByUrn(posts),
     followerCount: following?.followerCount ?? null,
+    excludedPostUrns: [...new Set(excludedPostUrns)],
   };
 }
 
@@ -398,11 +547,18 @@ export async function collectSnapshot() {
   await sleep(REQUEST_DELAY_MS);
 
   // Posts arrive with engagement and follower count attached — one request, not one per post.
-  const { posts, followerCount } = await getPostFeed(me.memberUrn);
+  const { posts, followerCount, excludedPostUrns } = await getPostFeed(me.memberUrn);
+
+  for (const post of posts) {
+    const analytics = await getPostAnalytics(post.urn);
+    post.metrics = { ...post.metrics, ...analytics };
+    await sleep(REQUEST_DELAY_MS);
+  }
 
   return {
     me,
     profile: { followerCount, profileViews },
     posts,
+    excludedPostUrns,
   };
 }
