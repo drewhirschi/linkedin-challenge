@@ -1,7 +1,7 @@
 // "How am I doing?" — the viewer's own results, first-class in the nav rather than something you
 // find by locating yourself on the board.
 import { useGetMe } from "@linkedin-challenge/client/react-query";
-import { MemberResults } from "../../components/member-results";
+import { PersonalPosts } from "../../components/member-results";
 
 export default function MyResults() {
   const { data, isLoading } = useGetMe();
@@ -16,5 +16,5 @@ export default function MyResults() {
     );
   }
 
-  return <MemberResults memberId={me.memberId} />;
+  return <PersonalPosts displayName={me.displayName ?? "Your results"} />;
 }

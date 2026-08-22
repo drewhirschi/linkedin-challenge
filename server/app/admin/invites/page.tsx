@@ -1,12 +1,10 @@
-// Invite management: mint codes, see who has redeemed. Joining the company is what enrolls
-// someone — there is no per-challenge invitation.
+// Invitations grant one user read participation in one specific challenge.
 import { useGetAdminOverview, useCreateInvites, getGetAdminOverviewQueryKey } from "@linkedin-challenge/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-function MintInvites({ onCreated }: { onCreated: () => void }) {
+function MintInvites({ challengeId, onCreated }: { challengeId: number; onCreated: () => void }) {
   const [count, setCount] = useState(5);
-  const [role, setRole] = useState("participant");
   const create = useCreateInvites();
 
   return (
@@ -15,7 +13,7 @@ function MintInvites({ onCreated }: { onCreated: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          create.mutate({ data: { count, role } }, { onSuccess: onCreated });
+          create.mutate({ id: challengeId, data: { count } }, { onSuccess: onCreated });
         }}
       >
         <div className="field row">
@@ -28,13 +26,6 @@ function MintInvites({ onCreated }: { onCreated: () => void }) {
               value={count}
               onChange={(e) => setCount(Number(e.target.value))}
             />
-          </label>
-          <label className="field" style={{ margin: 0 }}>
-            <span>Role</span>
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="participant">Participant</option>
-              <option value="admin">Admin</option>
-            </select>
           </label>
         </div>
         <button type="submit" disabled={create.isPending}>
@@ -61,7 +52,7 @@ export default function InvitesPage() {
     );
   }
 
-  const { invites } = data.data;
+  const { invites, current } = data.data;
 
   return (
     <>
@@ -71,7 +62,11 @@ export default function InvitesPage() {
         Sync extension with the same account — that connects their LinkedIn analytics.
       </p>
 
-      <MintInvites onCreated={refresh} />
+      {current ? (
+        <MintInvites challengeId={current.id} onCreated={refresh} />
+      ) : (
+        <div className="empty">Create a challenge before inviting people to it.</div>
+      )}
 
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         {invites.length === 0 ? (
@@ -81,7 +76,6 @@ export default function InvitesPage() {
             <thead>
               <tr>
                 <th>Code</th>
-                <th>Role</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -91,7 +85,6 @@ export default function InvitesPage() {
                   <td>
                     <span className="code">{i.code}</span>
                   </td>
-                  <td className="small muted">{i.role}</td>
                   <td>
                     <span className={`badge ${i.redeemed ? "muted" : "ok"}`}>
                       {i.redeemed ? "Redeemed" : "Open"}

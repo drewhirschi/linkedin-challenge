@@ -24,8 +24,6 @@ export default function Signup() {
           setError(null);
           signup.mutate({ data: {
             name, email, password,
-            // The organization remains the private data boundary, but is not a signup decision.
-            orgName: `${name.trim() || "My"}'s Challenge`,
           } }, {
             onSuccess: (res) => {
               if (res.status === 200) window.location.href = "/";

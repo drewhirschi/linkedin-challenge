@@ -15,3 +15,4 @@ export * from "./generated/react-query";
 // recognize as top-level exports. Keep the challenge mutation available from this public entry
 // point without editing generated output.
 export { useCreateChallenge } from "./generated/react-query/challenges/challenges";
+export { useCreateInvites } from "./generated/react-query/invites/invites";

@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 
-use crate::models::{Competition, Member, Post, PostComment, PostSnapshot, ProfileSnapshot};
+use crate::models::{ChallengeMembership, Competition, Member, Post, PostComment, PostSnapshot, ProfileSnapshot};
 
 pub const WEEK_SECONDS: i64 = 7 * 86400;
 
@@ -123,19 +123,26 @@ pub struct Standing {
 
 /// Compute the full leaderboard for a competition, sorted by total score descending.
 ///
-/// Ranks every member of the competition's org: per the product manifest, everyone in a company
-/// participates in every challenge it runs — there is no enrollment. Members with no collected
-/// data are skipped by `score_member`, so nobody appears on a board until they have synced.
+/// Ranks only users who explicitly joined this challenge. Membership is the user's grant for the
+/// challenge to read and score their post data.
 pub async fn compute_standings(db: &mut Db, comp: &Competition) -> toasty::Result<Vec<Standing>> {
     let cfg = ScoringConfig::from_competition(comp);
-
-    let members = Member::filter(Member::fields().org_id().eq(comp.org_id))
+    let memberships = ChallengeMembership::filter(
+        ChallengeMembership::fields().challenge_id().eq(comp.id),
+    )
         .exec(&mut *db)
         .await?;
 
     let mut standings = Vec::new();
-    for member in &members {
-        if let Some(standing) = score_member(db, member, comp, &cfg).await? {
+    for membership in memberships {
+        let Some(member) = Member::filter_by_id(membership.member_id)
+            .first()
+            .exec(&mut *db)
+            .await?
+        else {
+            continue;
+        };
+        if let Some(standing) = score_member(db, &member, comp, &cfg).await? {
             standings.push(standing);
         }
     }

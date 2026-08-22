@@ -12,7 +12,7 @@ use nextrs::conventions::MiddlewareResult;
 ///  * the auth API those surfaces post to;
 ///  * the extension protocol, which authenticates with a bearer sync token instead of the cookie.
 fn is_public(path: &str) -> bool {
-    matches!(path, "/auth/login" | "/auth/signup")
+    matches!(path, "/auth/login" | "/auth/signup" | "/auth/join")
         || path.starts_with("/api/auth/")
         // Liveness must answer without a session, or a load balancer sees a redirect.
         || path == "/api/health"
@@ -26,11 +26,6 @@ fn is_public(path: &str) -> bool {
 
 pub async fn handle(req: http::Request<axum::body::Body>) -> MiddlewareResult {
     let path = req.uri().path().to_string();
-    // Invite redemption is intentionally dormant. Keep its implementation for later, but do not
-    // expose it as a third account entry point.
-    if path == "/auth/join" {
-        return MiddlewareResult::response(Redirect::to("/auth/login").into_response());
-    }
     if is_public(&path) {
         return MiddlewareResult::next(req);
     }

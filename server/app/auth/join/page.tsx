@@ -9,14 +9,14 @@ export default function Join() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [joined, setJoined] = useState<{ orgName: string; slug: string } | null>(null);
+  const [joined, setJoined] = useState<{ challengeName: string } | null>(null);
   const join = useJoinWithInvite();
 
   // No token to copy any more: the extension signs in with these same credentials.
   if (joined) {
     return (
       <>
-        <h1>You&rsquo;re in — welcome to {joined.orgName}</h1>
+        <h1>You joined {joined.challengeName}</h1>
         <div className="notice ok">
           Your account is ready. To start syncing, install the Challenge Sync extension and sign in
           with the email and password you just chose.
@@ -34,7 +34,8 @@ export default function Join() {
     <>
       <h1>Join a challenge</h1>
       <p className="lede">
-        Got an invite code from your organizer? Redeem it here to create your account.
+        Redeem an invitation to let this challenge read and score your synced posts. If you
+        already have an account, use your existing email and password.
       </p>
       {error && <div className="notice err">{error}</div>}
 
@@ -48,7 +49,7 @@ export default function Join() {
               {
                 onSuccess: (res) => {
                   if (res.status === 200) {
-                    setJoined({ orgName: res.data.orgName, slug: res.data.orgSlug });
+                    setJoined({ challengeName: res.data.orgName });
                   } else {
                     setError(res.data?.error ?? "Something went wrong. Please try again.");
                   }

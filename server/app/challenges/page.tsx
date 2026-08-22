@@ -1,5 +1,4 @@
-// Every challenge the org has run, current first. Rows link to the board for that challenge's
-// window (the leaderboard page's switcher does the same thing; this is the browsable list).
+// Challenges the signed-in user has explicitly joined.
 import { useGetChallenges } from "@linkedin-challenge/client/react-query";
 import { fmtDate } from "../../components/format";
 
@@ -22,8 +21,8 @@ export default function ChallengesPage() {
     <>
       <h1>Challenges</h1>
       <p className="lede">
-        Everyone in the company takes part in every challenge — there&rsquo;s nothing to join.
-        Install the extension and your posts count automatically.
+        Joining a challenge gives that challenge permission to read and score your synced posts.
+        Your posts remain attached to your account.
       </p>
 
       {challenges.length === 0 ? (

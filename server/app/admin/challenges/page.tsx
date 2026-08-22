@@ -1,5 +1,5 @@
-// Challenge setup: the list of challenges and the full scoring configuration for a new one.
-// Everyone in the company participates automatically — creating the challenge IS the launch.
+// Challenge setup: any user can create one and becomes its first member. Other users join only
+// through challenge-specific invitations.
 import { useGetAdminOverview, useCreateChallenge, getGetAdminOverviewQueryKey } from "@linkedin-challenge/client/react-query";
 import type { ScoringConfig } from "@linkedin-challenge/client";
 import { fmtDate } from "../../../components/format";

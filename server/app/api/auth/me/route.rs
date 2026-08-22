@@ -4,7 +4,6 @@
 use axum::{Extension, Json};
 use http::HeaderMap;
 use linkedin_challenge_server::auth::current_session;
-use linkedin_challenge_server::models::Org;
 use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
@@ -49,16 +48,13 @@ pub async fn get(
     };
     let member = session.member;
 
-    let org = Org::filter_by_id(member.org_id)
-        .first()
-        .exec(&mut db)
-        .await?;
     Ok(Json(MeResponse {
         signed_in: true,
         display_name: Some(member.display_name),
-        org_slug: org.as_ref().map(|o| o.slug.clone()),
-        org_name: org.map(|o| o.name),
-        is_admin: member.is_admin,
+        org_slug: None,
+        org_name: None,
+        // Every user may create and manage their own challenges.
+        is_admin: true,
         is_system_admin: member.is_system_admin,
         member_id: Some(member.id),
         impersonated_by: session.impersonator.map(|m| m.display_name),

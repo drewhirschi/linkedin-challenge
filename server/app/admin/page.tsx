@@ -24,22 +24,20 @@ export default function AdminOverviewPage() {
     );
   }
 
-  const { org, current, aggregate: a, standings } = data.data;
+  const { current, aggregate: a, standings } = data.data;
 
   return (
     <>
-      <h1>Admin overview</h1>
+      <h1>My challenge overview</h1>
       <p className="lede">
-        {org.name}
         {current ? (
           <>
-            {" · "}
             <strong>{current.name}</strong> · {fmtDate(current.startAt)} →{" "}
             {fmtDate(current.endAt)}
           </>
         ) : (
           <>
-            {" — no challenge running. "}
+            No challenge running. {" "}
             <a href="/admin/challenges">Set one up.</a>
           </>
         )}

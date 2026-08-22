@@ -4,7 +4,7 @@
 use toasty::Db;
 
 use crate::auth::{hash_password, member_by_email};
-use crate::models::{Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot};
+use crate::models::{ChallengeMembership, Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot};
 use crate::scoring::ScoringConfig;
 use crate::util::{new_bearer_token, now_unix};
 
@@ -139,8 +139,9 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
     .await?;
 
     let cfg = ScoringConfig::default();
-    toasty::create!(Competition {
+    let competition = toasty::create!(Competition {
         org_id: org.id,
+        creator_id: 0,
         name: "Autumn Posting Sprint",
         start_at: start,
         end_at: end,
@@ -164,7 +165,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
     // An admin for the demo org — without one the dashboard is unreachable now that the admin
     // role, not a separate login, is what unlocks it.
     let (_unused, admin_token) = new_bearer_token();
-    toasty::create!(Member {
+    let admin = toasty::create!(Member {
         org_id: org.id,
         display_name: "Demo Admin",
         linkedin_urn: "pending:admin@demo.test",
@@ -179,6 +180,13 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
     })
     .exec(&mut *db)
     .await?;
+    toasty::update!(Competition::filter_by_id(competition.id) { creator_id: admin.id })
+        .exec(&mut *db).await?;
+    toasty::create!(ChallengeMembership {
+        challenge_id: competition.id,
+        member_id: admin.id,
+        joined_at: now,
+    }).exec(&mut *db).await?;
 
     // A product operator for the system panel: sysadmin@demo.test / demopassword. Belongs to the
     // demo org (every member belongs somewhere) but the flag is what matters.
@@ -221,6 +229,11 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
         })
         .exec(&mut *db)
         .await?;
+        toasty::create!(ChallengeMembership {
+            challenge_id: competition.id,
+            member_id: member.id,
+            joined_at: now,
+        }).exec(&mut *db).await?;
 
         // Two profile snapshots so there's an in-window follower/view delta.
         toasty::create!(ProfileSnapshot {

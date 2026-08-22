@@ -1,4 +1,4 @@
-//! `POST /api/auth/signup` — create an organization and its first admin, then sign them in.
+//! `POST /api/auth/signup` — create an independent user account, then sign them in.
 
 use axum::{Extension, Json};
 use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
@@ -13,7 +13,6 @@ use utoipa::ToSchema;
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SignupRequest {
-    pub org_name: String,
     pub name: String,
     pub email: String,
     pub password: String,
@@ -55,14 +54,14 @@ pub async fn post(
         ));
     }
 
-    let slug = unique_slug(&mut db, &slugify(&req.org_name)).await?;
-    let org = toasty::create!(Org {
-        slug: &slug,
-        name: req.org_name.trim(),
-        created_at: now_unix(),
-    })
-    .exec(&mut db)
-    .await?;
+    // `org_id` remains a required legacy storage column during the migration, but it is no longer
+    // an ownership or authorization boundary. Every new independent account uses this inert row.
+    let org = match Org::filter_by_slug("users").first().exec(&mut db).await? {
+        Some(org) => org,
+        None => toasty::create!(Org { slug: "users", name: "Users", created_at: now_unix() })
+            .exec(&mut db)
+            .await?,
+    };
 
     // Admins get a unique placeholder api_token_hash (never handed out) so the column stays unique.
     let (_unused, token_hash) = new_bearer_token();
@@ -72,7 +71,7 @@ pub async fn post(
         linkedin_urn: &urn,
         public_identifier: "",
         profile_url: None,
-        is_admin: true,
+        is_admin: false,
         is_system_admin: false,
         email: Some(email),
         password_hash: Some(hash_password(&req.password)),
@@ -92,42 +91,7 @@ pub async fn post(
         headers,
         Json(SignupResponse {
             ok: true,
-            org_slug: slug,
+            org_slug: String::new(),
         }),
     ))
-}
-
-fn slugify(s: &str) -> String {
-    let mut out = String::new();
-    let mut prev_dash = false;
-    for ch in s.trim().to_lowercase().chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch);
-            prev_dash = false;
-        } else if !prev_dash && !out.is_empty() {
-            out.push('-');
-            prev_dash = true;
-        }
-    }
-    let trimmed = out.trim_matches('-').to_string();
-    if trimmed.is_empty() {
-        "org".to_string()
-    } else {
-        trimmed
-    }
-}
-
-async fn unique_slug(db: &mut Db, base: &str) -> ApiResult<String> {
-    let mut candidate = base.to_string();
-    let mut n = 1;
-    while Org::filter_by_slug(&candidate)
-        .first()
-        .exec(&mut *db)
-        .await?
-        .is_some()
-    {
-        n += 1;
-        candidate = format!("{base}-{n}");
-    }
-    Ok(candidate)
 }

@@ -10,7 +10,7 @@
 
 use axum::{Extension, Json};
 use linkedin_challenge_server::auth::member_from_session_token;
-use linkedin_challenge_server::models::{Member, Org};
+use linkedin_challenge_server::models::Member;
 use linkedin_challenge_server::util::new_bearer_token;
 use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
@@ -56,17 +56,11 @@ pub async fn post(
         .exec(&mut db)
         .await?;
 
-    let org = Org::filter_by_id(member.org_id)
-        .first()
-        .exec(&mut db)
-        .await?
-        .ok_or_else(|| ApiError::not_found("organization not found"))?;
-
     Ok(Json(SessionDeviceResponse {
         sync_token: secret,
         display_name: member.display_name,
-        org_name: org.name,
-        org_slug: org.slug,
+        org_name: "Challenge Sync".into(),
+        org_slug: String::new(),
         member_id: member.id,
         linked: !member.linkedin_urn.starts_with("pending:"),
     }))

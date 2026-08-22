@@ -6,8 +6,8 @@
 
 use axum::{Extension, Json};
 use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
-use linkedin_challenge_server::auth::{establish_session, hash_password, member_by_email};
-use linkedin_challenge_server::models::{Invite, Member, Org};
+use linkedin_challenge_server::auth::{establish_session, hash_password, member_by_email, verify_password};
+use linkedin_challenge_server::models::{ChallengeMembership, Competition, Invite, Member, Org};
 use linkedin_challenge_server::util::{new_bearer_token, now_unix};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
 use serde::{Deserialize, Serialize};
@@ -61,39 +61,64 @@ pub async fn post(
         .filter(|i| !i.redeemed)
         .ok_or_else(|| ApiError::not_found("invite code not found or already used"))?;
 
-    let org = Org::filter_by_id(invite.org_id)
+    let challenge = Competition::filter_by_id(invite.challenge_id)
         .first()
         .exec(&mut db)
         .await?
-        .ok_or_else(|| ApiError::not_found("organization not found"))?;
+        .ok_or_else(|| ApiError::not_found("challenge not found"))?;
+    let org = Org::filter_by_id(invite.org_id)
+        .first().exec(&mut db).await?
+        .ok_or_else(|| ApiError::not_found("account storage unavailable"))?;
 
     let email = req.email.trim().to_lowercase();
     // Until the extension pairs a real LinkedIn identity, the unique URN column holds a placeholder
     // derived from the email — see `app/api/link/route.rs`, which swaps in the real URN.
     let urn = format!("pending:{email}");
 
-    if member_by_email(&mut db, &email).await?.is_some() {
-        return Err(ApiError::conflict(
-            "an account with that email already exists",
-        ));
-    }
+    let (member, secret) = match member_by_email(&mut db, &email).await? {
+        Some(member) => {
+            if !member.password_hash.as_deref().is_some_and(|hash| verify_password(&req.password, hash)) {
+                return Err(ApiError::unauthorized("invalid email or password"));
+            }
+            (member, String::new())
+        }
+        None => {
+            let (secret, token_hash) = new_bearer_token();
+            let member = toasty::create!(Member {
+                org_id: org.id,
+                display_name: req.name.trim(),
+                linkedin_urn: &urn,
+                public_identifier: "",
+                profile_url: None,
+                is_admin: false,
+                is_system_admin: false,
+                email: Some(email),
+                password_hash: Some(hash_password(&req.password)),
+                api_token_hash: token_hash,
+                created_at: now_unix(),
+            })
+            .exec(&mut db)
+            .await?;
+            (member, secret)
+        }
+    };
 
-    let (secret, token_hash) = new_bearer_token();
-    let member = toasty::create!(Member {
-        org_id: org.id,
-        display_name: req.name.trim(),
-        linkedin_urn: &urn,
-        public_identifier: "",
-        profile_url: None,
-        is_admin: invite.role == "admin",
-        is_system_admin: false,
-        email: Some(email),
-        password_hash: Some(hash_password(&req.password)),
-        api_token_hash: token_hash,
-        created_at: now_unix(),
-    })
+    let already_joined = ChallengeMembership::filter(
+        ChallengeMembership::fields().challenge_id().eq(challenge.id),
+    )
     .exec(&mut db)
-    .await?;
+    .await?
+    .into_iter()
+    .any(|membership| membership.member_id == member.id);
+    if !already_joined {
+        toasty::create!(ChallengeMembership {
+            challenge_id: challenge.id,
+            member_id: member.id,
+            joined_at: now_unix(),
+        })
+        .exec(&mut db)
+        .await?;
+    }
 
     toasty::update!(Invite::filter_by_id(invite.id) { redeemed: true })
         .exec(&mut db)
@@ -112,11 +137,11 @@ pub async fn post(
         headers,
         Json(JoinResponse {
             ok: true,
-            org_slug: org.slug,
-            org_name: org.name,
+            org_slug: challenge.id.to_string(),
+            org_name: challenge.name,
             member_id: member.id,
             sync_token: secret,
-            is_admin: member.is_admin,
+            is_admin: challenge.creator_id == member.id,
         }),
     ))
 }

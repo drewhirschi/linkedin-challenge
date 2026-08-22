@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
 
-use crate::models::{Competition, Invite, Member, Org, Post, PostComment, PostSnapshot};
+use crate::models::{ChallengeMembership, Competition, Invite, Member, Org, Post, PostComment, PostSnapshot};
 use crate::scoring::{
     ScoringConfig, Standing, WEEK_SECONDS, active_competition, compute_standings,
 };
@@ -17,13 +17,6 @@ use crate::util::now_unix;
 use crate::web::{ApiError, ApiResult};
 
 // --- summaries -------------------------------------------------------------------------------
-
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct OrgSummary {
-    pub slug: String,
-    pub name: String,
-}
 
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -86,7 +79,6 @@ impl StandingRow {
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ChallengeList {
-    pub org: OrgSummary,
     /// The challenge the app lands on: active-and-in-window first, else the most recent.
     pub current: Option<CompetitionInfo>,
     pub challenges: Vec<CompetitionInfo>,
@@ -96,7 +88,6 @@ pub struct ChallengeList {
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Leaderboard {
-    pub org: OrgSummary,
     pub competition: Option<CompetitionInfo>,
     /// The org's other challenges, for the board's switcher.
     pub challenges: Vec<CompetitionInfo>,
@@ -152,7 +143,6 @@ pub struct WeekGroup {
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberDetail {
-    pub org: OrgSummary,
     pub competition: Option<CompetitionInfo>,
     pub member_id: i64,
     pub display_name: String,
@@ -167,6 +157,15 @@ pub struct MemberDetail {
     pub post_count: usize,
     pub post_page: usize,
     pub post_page_count: usize,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PostPage {
+    pub posts: Vec<PostStat>,
+    pub total: usize,
+    pub page: usize,
+    pub page_count: usize,
 }
 
 // --- admin -----------------------------------------------------------------------------------
@@ -201,7 +200,6 @@ pub struct Aggregate {
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminOverview {
-    pub org: OrgSummary,
     pub admin_name: String,
     pub competitions: Vec<CompetitionInfo>,
     pub current: Option<CompetitionInfo>,
@@ -288,16 +286,50 @@ fn rank(standings: Vec<Standing>) -> Vec<StandingRow> {
         .collect()
 }
 
+pub async fn member_challenges(db: &mut Db, member_id: i64) -> ApiResult<Vec<Competition>> {
+    let memberships = ChallengeMembership::filter(
+        ChallengeMembership::fields().member_id().eq(member_id),
+    )
+    .exec(&mut *db)
+    .await?;
+    let mut challenges = Vec::new();
+    for membership in memberships {
+        if let Some(challenge) = Competition::filter_by_id(membership.challenge_id)
+            .first()
+            .exec(&mut *db)
+            .await?
+        {
+            challenges.push(challenge);
+        }
+    }
+    challenges.sort_by(|a, b| b.start_at.cmp(&a.start_at));
+    Ok(challenges)
+}
+
+pub async fn member_challenge(db: &mut Db, member_id: i64, id: i64) -> ApiResult<Competition> {
+    let membership = ChallengeMembership::filter(
+        ChallengeMembership::fields().member_id().eq(member_id),
+    )
+    .exec(&mut *db)
+    .await?
+    .into_iter()
+    .any(|membership| membership.challenge_id == id);
+    if !membership {
+        return Err(ApiError::not_found("challenge not found"));
+    }
+    Competition::filter_by_id(id)
+        .first()
+        .exec(&mut *db)
+        .await?
+        .ok_or_else(|| ApiError::not_found("challenge not found"))
+}
+
 /// The org's challenge list plus the default one to display.
-pub async fn challenge_list(db: &mut Db, org: &Org) -> ApiResult<ChallengeList> {
-    let comps = org_challenges(db, org.id).await?;
+pub async fn challenge_list(db: &mut Db, member: &Member) -> ApiResult<ChallengeList> {
+    let comps = member_challenges(db, member.id).await?;
     let infos: Vec<CompetitionInfo> = comps.iter().map(CompetitionInfo::new).collect();
     let current = active_competition(comps, now_unix());
     Ok(ChallengeList {
-        org: OrgSummary {
-            slug: org.slug.clone(),
-            name: org.name.clone(),
-        },
         current: current.as_ref().map(CompetitionInfo::new),
         challenges: infos,
     })
@@ -307,14 +339,14 @@ pub async fn challenge_list(db: &mut Db, org: &Org) -> ApiResult<ChallengeList> 
 /// otherwise whichever `active_competition` chooses.
 pub async fn leaderboard(
     db: &mut Db,
-    org: &Org,
+    member: &Member,
     challenge_id: Option<i64>,
 ) -> ApiResult<Leaderboard> {
-    let comps = org_challenges(db, org.id).await?;
+    let comps = member_challenges(db, member.id).await?;
     let challenges: Vec<CompetitionInfo> = comps.iter().map(CompetitionInfo::new).collect();
 
     let comp = match challenge_id {
-        Some(id) => Some(org_challenge(db, org.id, id).await?),
+        Some(id) => Some(member_challenge(db, member.id, id).await?),
         None => active_competition(comps, now_unix()),
     };
 
@@ -324,10 +356,6 @@ pub async fn leaderboard(
     };
 
     Ok(Leaderboard {
-        org: OrgSummary {
-            slug: org.slug.clone(),
-            name: org.name.clone(),
-        },
         competition: comp.as_ref().map(CompetitionInfo::new),
         challenges,
         standings,
@@ -341,7 +369,12 @@ pub async fn competition_aggregate(
     admin: &Member,
     challenge_id: i64,
 ) -> ApiResult<Aggregate> {
-    let comp = org_challenge(db, admin.org_id, challenge_id).await?;
+    let comp = Competition::filter_by_id(challenge_id)
+        .first()
+        .exec(&mut *db)
+        .await?
+        .filter(|challenge| challenge.creator_id == admin.id)
+        .ok_or_else(|| ApiError::not_found("challenge not found"))?;
     let standings = rank(compute_standings(db, &comp).await?);
     aggregate_for(db, &comp, &standings).await
 }
@@ -352,13 +385,20 @@ pub async fn aggregate_for(
     comp: &Competition,
     standings: &[StandingRow],
 ) -> ApiResult<Aggregate> {
-    let members = Member::filter(Member::fields().org_id().eq(comp.org_id))
+    let memberships = ChallengeMembership::filter(
+        ChallengeMembership::fields().challenge_id().eq(comp.id),
+    )
         .exec(&mut *db)
         .await?;
 
     let mut totals = (0i64, 0i64, 0i64, 0i64);
     let mut total_posts = 0usize;
-    for member in &members {
+    for membership in &memberships {
+        let Some(member) = Member::filter_by_id(membership.member_id)
+            .first()
+            .exec(&mut *db)
+            .await?
+        else { continue; };
         let posts = Post::filter(Post::fields().member_id().eq(member.id))
             .exec(&mut *db)
             .await?;
@@ -374,12 +414,12 @@ pub async fn aggregate_for(
         }
     }
 
-    let invites = Invite::filter(Invite::fields().org_id().eq(comp.org_id))
+    let invites = Invite::filter(Invite::fields().challenge_id().eq(comp.id))
         .exec(&mut *db)
         .await?;
 
     Ok(Aggregate {
-        participants: members.len(),
+        participants: memberships.len(),
         scoring_participants: standings.len(),
         total_posts,
         graded_posts: standings.iter().map(|s| s.graded_posts).sum(),
@@ -452,7 +492,7 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
 
 pub async fn member_detail(
     db: &mut Db,
-    org: &Org,
+    viewer: &Member,
     challenge_id: Option<i64>,
     member_id: i64,
     post_filter: Option<&str>,
@@ -464,14 +504,19 @@ pub async fn member_detail(
         .first()
         .exec(&mut *db)
         .await?
-        .filter(|m| m.org_id == org.id)
-        .ok_or_else(|| ApiError::not_found("member not found in this organization"))?;
+        .ok_or_else(|| ApiError::not_found("user not found"))?;
 
     // The challenge the caller asked about, defaulting to whichever the org is showing — so a
     // leaderboard row and the detail behind it always describe the same window.
     let comp = match challenge_id {
-        Some(id) => Some(org_challenge(db, org.id, id).await?),
-        None => active_competition(org_challenges(db, org.id).await?, now_unix()),
+        Some(id) => {
+            let challenge = member_challenge(db, viewer.id, id).await?;
+            // A challenge may read another user's posts only after that user joined it.
+            member_challenge(db, member.id, id).await?;
+            Some(challenge)
+        }
+        None if viewer.id == member.id => None,
+        None => return Err(ApiError::not_found("user not found")),
     };
 
     // This member's row, taken from the same ranked standings the leaderboard shows, so the rank
@@ -557,10 +602,6 @@ pub async fn member_detail(
     }
 
     Ok(MemberDetail {
-        org: OrgSummary {
-            slug: org.slug.clone(),
-            name: org.name.clone(),
-        },
         competition: comp.as_ref().map(CompetitionInfo::new),
         member_id: member.id,
         display_name: member.display_name,
@@ -599,14 +640,52 @@ fn clone_stat(s: &PostStat) -> PostStat {
     }
 }
 
-pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverview> {
-    let org = Org::filter_by_id(admin.org_id)
-        .first()
+pub async fn user_posts(
+    db: &mut Db,
+    member_id: i64,
+    post_filter: Option<&str>,
+    post_sort: &str,
+    post_page: usize,
+    post_page_size: usize,
+) -> ApiResult<PostPage> {
+    let stored = Post::filter(Post::fields().member_id().eq(member_id))
         .exec(&mut *db)
-        .await?
-        .ok_or_else(|| ApiError::not_found("organization not found"))?;
+        .await?;
+    let mut posts = Vec::with_capacity(stored.len());
+    for post in &stored {
+        posts.push(post_stats(db, post).await?.0);
+    }
+    let needle = post_filter.map(str::trim).filter(|value| !value.is_empty()).map(str::to_lowercase);
+    if let Some(needle) = needle {
+        posts.retain(|post| post.text_preview.as_deref().unwrap_or_default().to_lowercase().contains(&needle));
+    }
+    posts.sort_by(|a, b| {
+        let order = match post_sort {
+            "oldest" => a.posted_at.cmp(&b.posted_at),
+            "impressions" => b.impressions.cmp(&a.impressions),
+            "reactions" => b.reactions.cmp(&a.reactions),
+            "comments" => b.comments.cmp(&a.comments),
+            "reposts" => b.reposts.cmp(&a.reposts),
+            "sends" => b.sends.cmp(&a.sends),
+            "saves" => b.saves.cmp(&a.saves),
+            _ => b.posted_at.cmp(&a.posted_at),
+        };
+        order.then_with(|| b.posted_at.cmp(&a.posted_at))
+    });
+    let total = posts.len();
+    let page_count = total.div_ceil(post_page_size).max(1);
+    let page = post_page.clamp(1, page_count);
+    let start = (page - 1) * post_page_size;
+    Ok(PostPage {
+        posts: posts.into_iter().skip(start).take(post_page_size).collect(),
+        total,
+        page,
+        page_count,
+    })
+}
 
-    let mut comps = Competition::filter(Competition::fields().org_id().eq(org.id))
+pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverview> {
+    let mut comps = Competition::filter(Competition::fields().creator_id().eq(admin.id))
         .exec(&mut *db)
         .await?;
     comps.sort_by(|a, b| b.start_at.cmp(&a.start_at));
@@ -618,14 +697,25 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
         None => Vec::new(),
     };
 
-    let mut invites = Invite::filter(Invite::fields().org_id().eq(org.id))
-        .exec(&mut *db)
-        .await?;
+    let mut invites = match &current {
+        Some(challenge) => Invite::filter(Invite::fields().challenge_id().eq(challenge.id))
+            .exec(&mut *db).await?,
+        None => Vec::new(),
+    };
     invites.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
-    let members = Member::filter(Member::fields().org_id().eq(org.id))
-        .exec(&mut *db)
-        .await?;
+    let memberships = match &current {
+        Some(challenge) => ChallengeMembership::filter(
+            ChallengeMembership::fields().challenge_id().eq(challenge.id),
+        ).exec(&mut *db).await?,
+        None => Vec::new(),
+    };
+    let mut members = Vec::new();
+    for membership in &memberships {
+        if let Some(member) = Member::filter_by_id(membership.member_id).first().exec(&mut *db).await? {
+            members.push(member);
+        }
+    }
 
     // Engagement totals come from the latest snapshot of every in-window post, which is the same
     // basis the scoring uses — so the aggregate and the leaderboard can't disagree.
@@ -652,7 +742,7 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
     }
 
     let aggregate = Aggregate {
-        participants: members.iter().filter(|m| !m.is_admin).count(),
+        participants: members.len(),
         scoring_participants: standings.len(),
         total_posts,
         graded_posts: standings.iter().map(|s| s.graded_posts).sum(),
@@ -667,10 +757,6 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
     };
 
     Ok(AdminOverview {
-        org: OrgSummary {
-            slug: org.slug,
-            name: org.name,
-        },
         admin_name: admin.display_name.clone(),
         current: current.as_ref().map(CompetitionInfo::new),
         competitions,

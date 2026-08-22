@@ -1,10 +1,8 @@
-//! Admin guard for `/admin/**`.
-//!
-//! The root middleware established a session exists; this narrows it to an org admin. It hits the
-//! database — the role isn't knowable from the cookie — but only on admin page loads.
+//! Challenge-management pages are available to every signed-in user; API handlers enforce that
+//! mutations target challenges the user created.
 
 use axum::response::{IntoResponse, Redirect};
-use linkedin_challenge_server::auth::current_admin;
+use linkedin_challenge_server::auth::current_member;
 use nextrs::conventions::MiddlewareResult;
 use toasty::Db;
 
@@ -16,8 +14,7 @@ pub async fn handle(req: http::Request<axum::body::Body>) -> MiddlewareResult {
     };
 
     let mut db = db;
-    if current_admin(&mut db, req.headers()).await.is_none() {
-        // Home, not the sign-in page: they may well be signed in, just not as an admin.
+    if current_member(&mut db, req.headers()).await.is_none() {
         return MiddlewareResult::response(Redirect::to("/").into_response());
     }
     MiddlewareResult::next(req)

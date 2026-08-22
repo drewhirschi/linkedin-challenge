@@ -9,8 +9,7 @@
 use axum::{Extension, Json};
 use http::HeaderMap;
 use linkedin_challenge_server::auth::member_from_bearer;
-use linkedin_challenge_server::dto::org_slug;
-use linkedin_challenge_server::models::{Member, Org};
+use linkedin_challenge_server::models::Member;
 use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
@@ -82,17 +81,11 @@ pub async fn post(
     .exec(&mut db)
     .await?;
 
-    let org = Org::filter_by_id(member.org_id)
-        .first()
-        .exec(&mut db)
-        .await?
-        .ok_or_else(|| ApiError::not_found("organization not found"))?;
-
     Ok(Json(LinkResponse {
-        org_name: org.name,
+        org_name: "Challenge Sync".into(),
         display_name: name,
         member_id: member.id,
-        org_slug: org_slug(&mut db, member.org_id).await?,
+        org_slug: String::new(),
     }))
 }
 

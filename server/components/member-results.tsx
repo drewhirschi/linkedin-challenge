@@ -1,7 +1,7 @@
 // One member's results, LinkedIn-analytics style: the overall standing first, then each post
 // behind it, grouped into the same weekly buckets the scoring uses. Shared by "My results" and
 // the leaderboard drill-in — the manifest wants those to be the same view of the same data.
-import { useGetMemberDetail } from "@linkedin-challenge/client/react-query";
+import { useGetMemberDetail, useGetMyPosts } from "@linkedin-challenge/client/react-query";
 import type { PostStat, WeekGroup } from "@linkedin-challenge/client";
 import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
 import { useEffect, useRef, useState } from "react";
@@ -329,6 +329,50 @@ export function MemberResults({
         total={detail.postCount}
         page={detail.postPage}
         pageCount={detail.postPageCount}
+        filter={filter}
+        sort={sort}
+        onFilter={(value) => void setParams({ filter: value, page: 1 })}
+        onSort={(value) => void setParams({ sort: value, page: 1 })}
+        onPage={(value) => void setParams({ page: value })}
+      />
+    </>
+  );
+}
+
+export function PersonalPosts({ displayName }: { displayName: string }) {
+  const [{ filter, sort, page }, setParams] = useQueryStates({
+    filter: parseAsString.withDefault(""),
+    sort: parseAsStringLiteral(POST_SORTS).withDefault("newest"),
+    page: parseAsInteger.withDefault(1),
+  });
+  const { data, isLoading } = useGetMyPosts({
+    filter: filter || undefined,
+    sort,
+    page,
+    pageSize: PAGE_SIZE,
+  });
+  const serverPage = data?.status === 200 ? data.data.page : page;
+  useEffect(() => {
+    if (page !== serverPage) void setParams({ page: serverPage });
+  }, [page, serverPage, setParams]);
+
+  if (isLoading) return <div className="spinner">Loading results…</div>;
+  if (data?.status !== 200) return <div className="empty">We couldn&rsquo;t load your posts.</div>;
+
+  return (
+    <>
+      <div className="who" style={{ gap: 14, marginBottom: 4 }}>
+        <span className="avatar" style={{ width: 48, height: 48, fontSize: 16 }}>
+          {initials(displayName)}
+        </span>
+        <h1 style={{ margin: 0 }}>{displayName}</h1>
+      </div>
+      <p className="lede">Your LinkedIn data belongs to you. Challenges can read it only after you join.</p>
+      <PostExplorer
+        posts={data.data.posts}
+        total={data.data.total}
+        page={data.data.page}
+        pageCount={data.data.pageCount}
         filter={filter}
         sort={sort}
         onFilter={(value) => void setParams({ filter: value, page: 1 })}

@@ -26,8 +26,8 @@ const LABELS: Record<string, string> = {
   "/me": "My results",
   "/challenges": "Challenges",
   "/rules": "How scoring works",
-  "/admin": "Overview",
-  "/admin/challenges": "Challenge setup",
+  "/admin": "My challenge overview",
+  "/admin/challenges": "Create a challenge",
   "/admin/invites": "Invites",
   "/system": "All organizations",
 };
@@ -87,7 +87,7 @@ function Sidebar() {
 
               {me.isAdmin && (
                 <>
-                  <div className="nav-section">Admin</div>
+                  <div className="nav-section">Manage</div>
                   <NavLink href="/admin" pathname={pathname} />
                   <NavLink href="/admin/challenges" pathname={pathname} />
                   <NavLink href="/admin/invites" pathname={pathname} />

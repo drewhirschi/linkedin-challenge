@@ -45,8 +45,47 @@ pub async fn connect() -> Db {
         "ALTER TABLE post_snapshots ADD COLUMN members_reached BIGINT",
     )
     .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE competitions ADD COLUMN creator_id BIGINT NOT NULL DEFAULT 0",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE invites ADD COLUMN challenge_id BIGINT NOT NULL DEFAULT 0",
+    )
+    .await;
+    execute_migration(
+        &mut db,
+        "CREATE TABLE IF NOT EXISTS challenge_memberships (id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id BIGINT NOT NULL, member_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)",
+    )
+    .await;
+    execute_migration(
+        &mut db,
+        "CREATE UNIQUE INDEX IF NOT EXISTS challenge_memberships_challenge_member ON challenge_memberships (challenge_id, member_id)",
+    )
+    .await;
+    // Only rows predating challenge ownership have creator_id = 0. Backfill their former org
+    // participants once; future challenges use explicit memberships and are never touched here.
+    execute_migration(
+        &mut db,
+        "INSERT INTO challenge_memberships (challenge_id, member_id, joined_at) SELECT competitions.id, members.id, competitions.created_at FROM competitions JOIN members ON members.org_id = competitions.org_id WHERE competitions.creator_id = 0 AND NOT EXISTS (SELECT 1 FROM challenge_memberships existing WHERE existing.challenge_id = competitions.id AND existing.member_id = members.id)",
+    )
+    .await;
+    execute_migration(
+        &mut db,
+        "UPDATE competitions SET creator_id = COALESCE((SELECT MIN(id) FROM members WHERE members.org_id = competitions.org_id AND members.is_admin = TRUE), 0) WHERE creator_id = 0",
+    )
+    .await;
 
     db
+}
+
+async fn execute_migration(db: &mut Db, sql: &str) {
+    toasty::sql::statement(sql)
+        .exec(db)
+        .await
+        .unwrap_or_else(|error| panic!("failed to apply database migration `{sql}`: {error}"));
 }
 
 async fn add_column(db: &mut Db, sql: &str) {
@@ -127,6 +166,11 @@ pub struct Invite {
     #[belongs_to(key = org_id, references = id)]
     pub org: toasty::Deferred<Org>,
 
+    /// Challenge this invitation grants access to. `org_id` is retained only while old databases
+    /// transition away from organization ownership.
+    #[index]
+    pub challenge_id: i64,
+
     #[unique]
     pub code: String,
     /// "participant" or "admin".
@@ -145,6 +189,10 @@ pub struct Competition {
     pub org_id: i64,
     #[belongs_to(key = org_id, references = id)]
     pub org: toasty::Deferred<Org>,
+
+    /// User who created and manages this challenge.
+    #[index]
+    pub creator_id: i64,
 
     pub name: String,
     pub start_at: i64,
@@ -170,6 +218,19 @@ pub struct Competition {
 
     pub is_active: bool,
     pub created_at: i64,
+}
+
+/// A user's explicit agreement to let one challenge read and score their post data.
+#[derive(Debug, toasty::Model)]
+pub struct ChallengeMembership {
+    #[key]
+    #[auto]
+    pub id: i64,
+    #[index]
+    pub challenge_id: i64,
+    #[index]
+    pub member_id: i64,
+    pub joined_at: i64,
 }
 
 /// A post authored by a member. Deduped by LinkedIn URN.
