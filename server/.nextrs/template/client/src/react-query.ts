@@ -10,3 +10,8 @@ export function useParams<
 
 // Generated TanStack Query hooks/options, plus nextrs URL-bound companions.
 export * from "./generated/react-query";
+
+// Orval indents mutation declarations, which nextrs' generated-barrel scanner does not currently
+// recognize as top-level exports. Keep the challenge mutation available from this public entry
+// point without editing generated output.
+export { useCreateChallenge } from "./generated/react-query/challenges/challenges";
