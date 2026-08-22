@@ -1,6 +1,6 @@
 // MV3 service worker: schedules periodic scrapes, runs them, and answers popup messages.
 import { SYNC_PERIOD_MINUTES, SYNC_JITTER_MINUTES, MIN_SYNC_INTERVAL_MINUTES } from "./config.js";
-import { getState, setState, isLinked, clearLink } from "./storage.js";
+import { getState, setState, isLinked } from "./storage.js";
 import { collectSnapshot, getMe, diagnose, isLinkedInSignedIn } from "./linkedin.js";
 import { isAppSignedIn, linkIdentityToAccount, pushSnapshot, signInFromSession } from "./sync.js";
 import { SERVER_URL, LINKEDIN_ORIGIN } from "./config.js";
@@ -143,12 +143,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case "SYNC_NOW":
           sendResponse(await runSync({ manual: true }));
           break;
-        case "UNLINK": {
-          await clearLink();
-          await chrome.alarms.clear(ALARM);
-          sendResponse({ ok: true });
-          break;
-        }
         default:
           sendResponse({ ok: false, error: "Unknown message." });
       }

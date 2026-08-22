@@ -18,7 +18,7 @@ doctor:
 
 # Run the web/API server with the empty local account at http://localhost:3312.
 dev:
-    cd server && DATABASE_URL=turso:linkedin.db SEED_LOCAL=1 cargo dev
+    cd server && DATABASE_URL=turso:linkedin.db cargo dev
 
 # Create the empty local account without starting the server.
 seed-local:

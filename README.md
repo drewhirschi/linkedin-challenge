@@ -34,7 +34,8 @@ just extension-dev      # extension/dist/unpacked, baked for that local server
 just check              # build, typecheck, and tests
 ```
 
-`just dev` idempotently creates one empty local account, without challenges or fake LinkedIn data:
+Every debug server start idempotently creates one empty local account, without challenges or fake
+LinkedIn data. This works with `just dev`, `cargo dev`, or `cargo run`:
 
 ```text
 drew@local.test / localpassword

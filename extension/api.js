@@ -26,11 +26,29 @@ export function installApiBaseUrl() {
 
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const base = SERVER_URL.replace(/\/$/, "");
-  globalThis.fetch = (input, init) =>
-    nativeFetch(
-      typeof input === "string" && input.startsWith("/api/") ? base + input : input,
-      init,
-    );
+  globalThis.fetch = async (input, init) => {
+    const isApi = typeof input === "string" && input.startsWith("/api/");
+    const response = await nativeFetch(isApi ? base + input : input, init);
+    if (!isApi) return response;
+
+    // The generated client assumes every response body is JSON. Framework-level failures can be
+    // plain text (for example "Failed to ..."), which used to hide the real problem behind
+    // "Unexpected token ... is not valid JSON". Normalize only our API responses at this seam.
+    const body = await response.text();
+    if (!body) return new Response(null, response);
+    try {
+      JSON.parse(body);
+      return new Response(body, response);
+    } catch {
+      const headers = new Headers(response.headers);
+      headers.set("content-type", "application/json");
+      return new Response(JSON.stringify({ error: body }), {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }
+  };
 }
 
 /** Bearer auth for the endpoints that take a sync token, as a `RequestInit` for the client. */

@@ -180,6 +180,12 @@ ul.plain li:last-child { border-bottom: none; }
 .password-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 .auth-submit { width: 100%; min-height: 44px; margin-top: 3px; font-size: 15px; }
 .auth-note { color: var(--muted); font-size: 12px; text-align: center; margin: 20px 0 0; }
+.auth-switch {
+  color: var(--muted); font-size: 13px; text-align: center; margin: 22px 0 0;
+  padding-top: 20px; border-top: 1px solid var(--line);
+}
+.auth-switch a { font-weight: 600; }
+.field-help { color: var(--muted); font-size: 12px; margin: 5px 0 0; }
 
 @media (max-width: 520px) {
   .auth-page { min-height: auto; padding: 12px 0; place-items: start center; }

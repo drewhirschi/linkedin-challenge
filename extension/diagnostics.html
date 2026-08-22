@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="diagnostics.css" />
+    <title>Challenge Sync diagnostics</title>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Challenge Sync</p>
+      <h1>LinkedIn diagnostics</h1>
+      <p class="lede">This report contains response structure and numeric field names, not post text or names.</p>
+      <div class="actions">
+        <button id="refresh-btn">Refresh</button>
+        <button id="copy-btn" class="secondary" disabled>Copy diagnostics</button>
+        <span id="status" role="status">Collecting…</span>
+      </div>
+      <pre id="report" tabindex="0">Collecting diagnostics…</pre>
+    </main>
+    <script type="module" src="diagnostics.js"></script>
+  </body>
+</html>

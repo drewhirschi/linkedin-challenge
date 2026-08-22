@@ -26,14 +26,3 @@ export async function isLinked() {
   const { syncToken } = await getState();
   return Boolean(syncToken);
 }
-
-export async function clearLink() {
-  await chrome.storage.local.set({
-    syncToken: null,
-    orgName: null,
-    displayName: null,
-    lastSyncAt: null,
-    lastError: null,
-    lastPostsIngested: 0,
-  });
-}

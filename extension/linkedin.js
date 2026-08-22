@@ -113,7 +113,13 @@ export async function getProfileViews() {
 // Recent posts by the member with public engagement (reactions/comments/reposts).
 // Engagement counts (reactions/comments/reposts/impressions) ride along in `included`.
 export async function getPosts(memberUrn) {
-  if (!memberUrn) return [];
+  return (await getPostFeed(memberUrn)).posts;
+}
+
+// Fetch posts and the follower count that LinkedIn now includes alongside them. Keeping these in
+// one request avoids the retired `networkinfo` endpoint and matches the live response diagnostics.
+async function getPostFeed(memberUrn) {
+  if (!memberUrn) return { posts: [], followerCount: null };
   let json;
   try {
     json = await voyagerFetch(
@@ -121,8 +127,13 @@ export async function getPosts(memberUrn) {
         `&profileUrn=${encodeURIComponent(memberUrn)}`
     );
   } catch {
-    return [];
+    return { posts: [], followerCount: null };
   }
+
+  const following = firstWith(
+    json,
+    (e) => e && (e.$type || "").endsWith("FollowingInfo") && typeof e.followerCount === "number",
+  );
 
   // Updates carry commentary + a socialDetail with reaction/comment/share counts.
   const updates = allWith(
@@ -151,7 +162,10 @@ export async function getPosts(memberUrn) {
     });
     if (posts.length >= MAX_POSTS) break;
   }
-  return dedupeByUrn(posts);
+  return {
+    posts: dedupeByUrn(posts),
+    followerCount: following?.followerCount ?? null,
+  };
 }
 
 // NOTE: there used to be a GraphQL "author analytics" call here to fetch impressions, guarded by
@@ -371,14 +385,11 @@ export async function collectSnapshot() {
   const me = await getMe(); // throws NOT_LOGGED_IN if no session
   await sleep(REQUEST_DELAY_MS);
 
-  const followerCount = await getFollowerCount(me.publicIdentifier);
-  await sleep(REQUEST_DELAY_MS);
-
   const profileViews = await getProfileViews();
   await sleep(REQUEST_DELAY_MS);
 
-  // Posts arrive with their engagement counts already attached — one request, not one per post.
-  const posts = await getPosts(me.memberUrn);
+  // Posts arrive with engagement and follower count attached — one request, not one per post.
+  const { posts, followerCount } = await getPostFeed(me.memberUrn);
 
   return {
     me,

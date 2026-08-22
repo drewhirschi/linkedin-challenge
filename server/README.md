@@ -12,7 +12,7 @@ Ported from Topcoat; see [MIGRATION.md](../MIGRATION.md) for what moved where an
 ```sh
 cargo install cargo-nextrs-dev      # one-time, the `cargo dev` watcher
 cd client && npm install && cd ..   # one-time, the bundler resolves imports from here
-SEED_LOCAL=1 cargo dev              # http://localhost:3312, one empty local account
+cargo dev                           # http://localhost:3312, one empty local account
 ```
 
 Or use `just dev` from the repository root, which selects the local file database and local seed.

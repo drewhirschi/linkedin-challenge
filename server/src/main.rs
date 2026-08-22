@@ -19,11 +19,18 @@ async fn main() {
 
     let db = models::connect().await;
 
-    if std::env::var("SEED_LOCAL").is_ok() {
+    // Development should always have one known way in, whether started through `just dev`,
+    // `cargo dev`, or `cargo run`. Release builds never seed it unless explicitly requested.
+    if cfg!(debug_assertions) || std::env::var("SEED_LOCAL").is_ok() {
         let mut seed_db = db.clone();
         seed::seed_local_account(&mut seed_db)
             .await
             .expect("failed to seed local account");
+        println!(
+            "local account ready: {} / {}",
+            seed::LOCAL_EMAIL,
+            seed::LOCAL_PASSWORD
+        );
     }
 
     if std::env::var("SEED_DEMO").is_ok() {

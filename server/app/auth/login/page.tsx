@@ -85,7 +85,9 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="auth-note">Use the account provided by your challenge organizer.</p>
+        <p className="auth-switch">
+          Don&rsquo;t have an account? <a href="/auth/signup">Create one</a>
+        </p>
       </div>
     </div>
   );

@@ -51,8 +51,8 @@ pub struct CommentPayload {
     pub created_at: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[derive(Default, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase", default)]
 pub struct Metrics {
     pub impressions: Option<i64>,
     pub reactions: Option<i64>,

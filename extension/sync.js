@@ -35,7 +35,7 @@ export async function signInFromSession() {
 
   const res = await signInDeviceWithSession({ sessionToken });
   if (res.status === 401) return null; // stale or expired cookie — same remedy as having none
-  if (res.status !== 200) throw new Error(`Server error (${res.status}).`);
+  if (res.status !== 200) throw new Error(res.data?.error || `Server error (${res.status}).`);
   return res.data;
 }
 
@@ -48,7 +48,7 @@ export async function linkIdentityToAccount(syncToken, member) {
   if (res.status === 409) {
     throw new Error("This LinkedIn account is already linked to someone else.");
   }
-  if (res.status !== 200) throw new Error(`Server error (${res.status}).`);
+  if (res.status !== 200) throw new Error(res.data?.error || `Server error (${res.status}).`);
 
   await setState({
     syncToken: token,
@@ -91,6 +91,6 @@ export async function pushSnapshot(payload) {
     }
   }
 
-  if (res.status !== 200) throw new Error(`Server error (${res.status}).`);
+  if (res.status !== 200) throw new Error(res.data?.error || `Server error (${res.status}).`);
   return res.data;
 }
