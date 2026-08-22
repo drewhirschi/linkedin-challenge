@@ -7,13 +7,13 @@ transmits the LinkedIn password, and never posts, likes, or messages on the user
 
 ## Install (unpacked, for development)
 
-1. Open `chrome://extensions`.
-2. Toggle **Developer mode** (top right).
-3. Click **Load unpacked** and select this `extension/` folder.
-4. Pin the extension, make sure you're logged into LinkedIn, and click the icon.
-5. Sign in with your **challenge account** — the same email and password you use on the website
-   (create it at `/signup` for a new org, or `/join` with an invite code). Optionally set a custom
-   server URL under **Advanced** (defaults to `http://localhost:3000`).
+1. Start the server from the repository root with `just dev`.
+2. Build the local extension with `just extension-dev`.
+3. Open `chrome://extensions` and toggle **Developer mode** (top right).
+4. Click **Load unpacked** and select `extension/dist/unpacked/`. Keep using this path so Chrome
+   preserves the extension identity and its local storage.
+5. Pin the extension and sign in to both the challenge at `http://localhost:3312` and LinkedIn.
+6. After changing extension code, rerun `just extension-dev` and click **Reload** on its card.
 
 ## How it works
 
@@ -24,15 +24,15 @@ transmits the LinkedIn password, and never posts, likes, or messages on the user
 | `linkedin.js` | The one fragile module: all LinkedIn/Voyager API calls + parsing. A LinkedIn change is a one-file fix. |
 | `sync.js` | Talks to our server through the generated client; maps status codes to human messages. |
 | `api.js` | Re-exports the generated client and points its root-relative URLs at the configured server. |
-| `generated/nextrs-client/` | **Generated — do not edit.** Typed fetch client produced from the Rust routes by `cargo nextrs client generate` (config: `server/client/nextrs.client.json`). |
+| `generated/nextrs-client/` | **Generated — do not edit.** Typed fetch client produced from the Rust routes through the server's `.nextrs` client configuration. |
 | `storage.js` | `chrome.storage.local` wrapper for config + status. No LinkedIn credentials stored. |
 | `config.js` | Tunables: default server URL, sync cadence, jitter, request delay. |
 | `popup.*` | The linking + status UI. |
 
-Auth model: the popup takes the user's challenge-account email and password, exchanges them at
-`/api/auth/device` for a sync token, and stores only that token — the password is never persisted.
-Every later request carries the token as a bearer header. Signing in rotates the token, so linking
-a browser un-links any previous one.
+Auth model: the extension reads the challenge website's existing `session` cookie and exchanges it
+at `/api/auth/device/session` for a sync token. It never asks for or stores the account password.
+Every later request carries the sync token as a bearer header. Connecting rotates the token, so
+linking a browser un-links any previous one.
 
 For LinkedIn itself no credentials are involved at all: the worker runs in the user's browser, so
 LinkedIn cookies attach automatically to same-origin requests. The only header we set is
@@ -47,9 +47,8 @@ request and response shapes cannot drift: rename a field in `route.rs`, regenera
 site here fails to type-check instead of breaking silently at runtime. Regenerate from the server
 directory with `cargo nextrs client generate`.
 
-It is generated with an empty base URL, because each install points at a different server
-(localhost in dev, the company deployment in production, changeable from the popup) and the base
-URL would otherwise be frozen at generation time. `api.js` therefore resolves the client's
+It is generated with an empty base URL because each build points at one server: localhost in dev
+or the production origin in a release. `api.js` therefore resolves the client's
 root-relative `/api/...` paths against the configured server. Absolute URLs pass through untouched,
 so the LinkedIn Voyager calls in `linkedin.js` are unaffected.
 

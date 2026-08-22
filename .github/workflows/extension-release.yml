@@ -1,0 +1,47 @@
+name: Build extension release
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: Production HTTPS origin baked into the extension
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build verified extension zip
+        env:
+          EXTENSION_SERVER_URL: ${{ inputs.server_url }}
+        run: |
+          [[ "$EXTENSION_SERVER_URL" == https://* ]] || {
+            echo "server_url must be a production HTTPS origin" >&2
+            exit 1
+          }
+          ./extension/build.sh "$EXTENSION_SERVER_URL"
+
+      - name: Record build details
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path("extension/dist/unpacked/manifest.json").read_text())
+          print(f"version={manifest['version']}")
+          print("host_permissions=" + ",".join(manifest["host_permissions"]))
+          PY
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: challenge-sync-extension-${{ github.sha }}
+          path: extension/dist/challenge-sync-*.zip
+          if-no-files-found: error
+          retention-days: 30

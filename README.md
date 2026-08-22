@@ -19,22 +19,32 @@ See **[MANIFEST.md](MANIFEST.md)** for the full vision, actors, and architecture
 
 ## Quick start
 
-### Server
+Install the two project-level command-line tools once:
 
 ```sh
-cd server
-cargo install topcoat-cli          # one-time (Topcoat dev server)
-SEED_DEMO=1 topcoat dev            # or: SEED_DEMO=1 cargo run
+cargo install just cargo-nextrs
 ```
 
-- `http://127.0.0.1:3000/orgs/demo` — a populated demo leaderboard (with `SEED_DEMO=1`)
-- `http://127.0.0.1:3000/admin/signup` — create your own org + competition + invites
+Then, from the repository root:
 
-### Extension
+```sh
+just doctor             # verify local tools
+just dev                # server with reloads at http://localhost:3312
+just extension-dev      # extension/dist/unpacked, baked for that local server
+just check              # build, typecheck, and tests
+```
 
-1. `chrome://extensions` → enable Developer mode → **Load unpacked** → pick `extension/`.
-2. Log into LinkedIn, open the extension, paste an invite code from the admin dashboard.
-   (Set the server URL under **Advanced** if not `localhost:3000`.)
+Load `extension/dist/unpacked/` from `chrome://extensions`. After an extension change, rerun
+`just extension-dev` and click **Reload** on the extension card.
+
+Production extension packages require an explicit HTTPS server origin:
+
+```sh
+just extension-release https://challenge.example.com
+```
+
+The same build is available as the manually triggered **Build extension release** GitHub workflow.
+It retains the verified zip as an artifact but does not publish it automatically.
 
 ## How it fits together
 
