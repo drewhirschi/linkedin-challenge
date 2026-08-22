@@ -17,6 +17,14 @@ pub struct MemberDetailQuery {
     /// The challenge window to bucket posts into; omitted means the org's current one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub challenge_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<usize>,
 }
 
 #[nextrs::api(operation_id = "getMemberDetail")]
@@ -28,5 +36,21 @@ pub async fn get(
 ) -> Result<Json<MemberDetail>, ApiError> {
     let member = require_member(&mut db, &headers).await?;
     let org = org_of(&mut db, &member).await?;
-    Ok(Json(member_detail(&mut db, &org, q.challenge_id, id).await?))
+    let sort = q.sort.as_deref().unwrap_or("newest");
+    if !["newest", "oldest", "impressions", "reactions", "comments", "reposts", "sends", "saves"]
+        .contains(&sort)
+    {
+        return Err(ApiError::bad_request("invalid post sort"));
+    }
+    let page_size = q.page_size.unwrap_or(50).clamp(1, 100);
+    Ok(Json(member_detail(
+        &mut db,
+        &org,
+        q.challenge_id,
+        id,
+        q.filter.as_deref(),
+        sort,
+        q.page.unwrap_or(1).max(1),
+        page_size,
+    ).await?))
 }

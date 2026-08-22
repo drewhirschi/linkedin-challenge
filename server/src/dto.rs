@@ -162,6 +162,11 @@ pub struct MemberDetail {
     pub weeks: Vec<WeekGroup>,
     /// Posts we hold that fall outside the competition window.
     pub outside_window: Vec<PostStat>,
+    /// Server-filtered, server-sorted page used by the post explorer.
+    pub posts: Vec<PostStat>,
+    pub post_count: usize,
+    pub post_page: usize,
+    pub post_page_count: usize,
 }
 
 // --- admin -----------------------------------------------------------------------------------
@@ -450,6 +455,10 @@ pub async fn member_detail(
     org: &Org,
     challenge_id: Option<i64>,
     member_id: i64,
+    post_filter: Option<&str>,
+    post_sort: &str,
+    post_page: usize,
+    post_page_size: usize,
 ) -> ApiResult<MemberDetail> {
     let member = Member::filter_by_id(member_id)
         .first()
@@ -480,9 +489,11 @@ pub async fn member_detail(
 
     let mut in_window: Vec<(i64, PostStat)> = Vec::new();
     let mut outside: Vec<PostStat> = Vec::new();
+    let mut all_posts: Vec<PostStat> = Vec::new();
 
     for post in &posts {
         let (mut stat, posted_at) = post_stats(db, post).await?;
+        all_posts.push(clone_stat(&stat));
         match &comp {
             Some(c) if posted_at >= c.start_at && posted_at <= c.end_at => {
                 stat.in_window = true;
@@ -491,6 +502,35 @@ pub async fn member_detail(
             _ => outside.push(stat),
         }
     }
+
+    let needle = post_filter.map(str::trim).filter(|value| !value.is_empty()).map(str::to_lowercase);
+    if let Some(needle) = needle {
+        all_posts.retain(|post| {
+            post.text_preview
+                .as_deref()
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains(&needle)
+        });
+    }
+    all_posts.sort_by(|a, b| {
+        let order = match post_sort {
+            "oldest" => a.posted_at.cmp(&b.posted_at),
+            "impressions" => b.impressions.cmp(&a.impressions),
+            "reactions" => b.reactions.cmp(&a.reactions),
+            "comments" => b.comments.cmp(&a.comments),
+            "reposts" => b.reposts.cmp(&a.reposts),
+            "sends" => b.sends.cmp(&a.sends),
+            "saves" => b.saves.cmp(&a.saves),
+            _ => b.posted_at.cmp(&a.posted_at),
+        };
+        order.then_with(|| b.posted_at.cmp(&a.posted_at))
+    });
+    let post_count = all_posts.len();
+    let post_page_count = post_count.div_ceil(post_page_size).max(1);
+    let post_page = post_page.clamp(1, post_page_count);
+    let start = (post_page - 1) * post_page_size;
+    let posts_page = all_posts.into_iter().skip(start).take(post_page_size).collect();
 
     outside.sort_by(|a, b| b.posted_at.cmp(&a.posted_at));
 
@@ -528,6 +568,10 @@ pub async fn member_detail(
         standing,
         weeks,
         outside_window: outside,
+        posts: posts_page,
+        post_count,
+        post_page,
+        post_page_count,
     })
 }
 

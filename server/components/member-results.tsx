@@ -3,8 +3,8 @@
 // the leaderboard drill-in — the manifest wants those to be the same view of the same data.
 import { useGetMemberDetail } from "@linkedin-challenge/client/react-query";
 import type { PostStat, WeekGroup } from "@linkedin-challenge/client";
-import { debounce, parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
-import { useEffect, useMemo } from "react";
+import { parseAsInteger, parseAsString, parseAsStringLiteral, useQueryStates } from "nuqs";
+import { useEffect, useRef, useState } from "react";
 import { fmtInt, fmtNum, fmtDate, initials } from "./format";
 
 const PAGE_SIZE = 50;
@@ -104,33 +104,34 @@ function Week({ group, gradedPerWeek }: { group: WeekGroup; gradedPerWeek: numbe
   );
 }
 
-function PostExplorer({ posts }: { posts: PostStat[] }) {
-  const [{ filter, sort, page }, setParams] = useQueryStates({
-    filter: parseAsString.withDefault(""),
-    sort: parseAsStringLiteral(POST_SORTS).withDefault("newest"),
-    page: parseAsInteger.withDefault(1),
-  });
-  const filtered = useMemo(() => {
-    const needle = filter.trim().toLocaleLowerCase();
-    const matching = needle
-      ? posts.filter((post) => post.textPreview?.toLocaleLowerCase().includes(needle))
-      : posts;
-    const direction = sort === "oldest" ? 1 : -1;
-    return [...matching].sort((a, b) => {
-      if (sort === "newest" || sort === "oldest") {
-        return direction * (a.postedAt - b.postedAt);
-      }
-      const difference = b[sort] - a[sort];
-      return difference || b.postedAt - a.postedAt;
-    });
-  }, [posts, filter, sort]);
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const currentPage = Math.min(Math.max(1, page), pageCount);
-  const shown = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+function PostExplorer({
+  posts,
+  total,
+  page,
+  pageCount,
+  filter,
+  sort,
+  onFilter,
+  onSort,
+  onPage,
+}: {
+  posts: PostStat[];
+  total: number;
+  page: number;
+  pageCount: number;
+  filter: string;
+  sort: (typeof POST_SORTS)[number];
+  onFilter: (value: string) => void;
+  onSort: (value: (typeof POST_SORTS)[number]) => void;
+  onPage: (value: number) => void;
+}) {
+  const [filterInput, setFilterInput] = useState(filter);
+  const filterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    if (page !== currentPage) void setParams({ page: currentPage });
-  }, [page, currentPage, setParams]);
+  useEffect(() => setFilterInput(filter), [filter]);
+  useEffect(() => () => {
+    if (filterTimer.current) clearTimeout(filterTimer.current);
+  }, []);
 
   return (
     <section className="post-explorer">
@@ -138,9 +139,7 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
         <div>
           <h2>Synced posts</h2>
           <p className="small muted">
-            {filtered.length === posts.length
-              ? `${posts.length} post${posts.length === 1 ? "" : "s"}`
-              : `${filtered.length} of ${posts.length} posts`}
+            {total} post{total === 1 ? "" : "s"}
           </p>
         </div>
         <div className="post-controls">
@@ -148,12 +147,12 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
             <span>Filter posts</span>
             <input
               type="search"
-              value={filter}
+              value={filterInput}
               onChange={(event) => {
-                void setParams(
-                  { filter: event.target.value, page: 1 },
-                  { limitUrlUpdates: debounce(300) },
-                );
+                const value = event.target.value;
+                setFilterInput(value);
+                if (filterTimer.current) clearTimeout(filterTimer.current);
+                filterTimer.current = setTimeout(() => onFilter(value), 300);
               }}
               placeholder="Search post text"
             />
@@ -163,7 +162,7 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
             <select
               value={sort}
               onChange={(event) => {
-                void setParams({ sort: event.target.value as (typeof POST_SORTS)[number], page: 1 });
+                onSort(event.target.value as (typeof POST_SORTS)[number]);
               }}
             >
               <option value="newest">Newest first</option>
@@ -178,13 +177,13 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
           </label>
         </div>
       </div>
-      {shown.length === 0 ? (
+      {posts.length === 0 ? (
         <div className="empty">
-          {posts.length === 0 ? "No posts have synced yet." : "No posts match that filter."}
+          {filter ? "No posts match that filter." : "No posts have synced yet."}
         </div>
       ) : (
         <div className="post-list">
-          {shown.map((post) => (
+          {posts.map((post) => (
             <Post key={post.id} post={post} />
           ))}
         </div>
@@ -193,18 +192,18 @@ function PostExplorer({ posts }: { posts: PostStat[] }) {
         <nav className="pagination" aria-label="Synced posts pages">
           <button
             type="button"
-            disabled={currentPage === 1}
-            onClick={() => void setParams({ page: currentPage - 1 })}
+            disabled={page === 1}
+            onClick={() => onPage(page - 1)}
           >
             Previous
           </button>
           <span className="small muted">
-            Page {currentPage} of {pageCount}
+            Page {page} of {pageCount}
           </span>
           <button
             type="button"
-            disabled={currentPage === pageCount}
-            onClick={() => void setParams({ page: currentPage + 1 })}
+            disabled={page === pageCount}
+            onClick={() => onPage(page + 1)}
           >
             Next
           </button>
@@ -225,10 +224,19 @@ export function MemberResults({
   backHref?: string;
   backLabel?: string;
 }) {
+  const [{ filter, sort, page }, setParams] = useQueryStates({
+    filter: parseAsString.withDefault(""),
+    sort: parseAsStringLiteral(POST_SORTS).withDefault("newest"),
+    page: parseAsInteger.withDefault(1),
+  });
   const { data, isLoading } = useGetMemberDetail(
     memberId,
-    challengeId !== undefined ? { challengeId } : undefined,
+    { challengeId, filter: filter || undefined, sort, page, pageSize: PAGE_SIZE },
   );
+  const serverPage = data?.status === 200 ? data.data.postPage : page;
+  useEffect(() => {
+    if (page !== serverPage) void setParams({ page: serverPage });
+  }, [page, serverPage, setParams]);
 
   if (isLoading) return <div className="spinner">Loading results…</div>;
   if (data?.status !== 200) {
@@ -236,8 +244,7 @@ export function MemberResults({
   }
 
   const detail = data.data;
-  const { standing, competition, weeks, outsideWindow } = detail;
-  const allPosts = [...weeks.flatMap((group) => group.posts), ...outsideWindow];
+  const { standing, competition, weeks } = detail;
 
   return (
     <>
@@ -317,7 +324,17 @@ export function MemberResults({
         </>
       )}
 
-      <PostExplorer posts={allPosts} />
+      <PostExplorer
+        posts={detail.posts}
+        total={detail.postCount}
+        page={detail.postPage}
+        pageCount={detail.postPageCount}
+        filter={filter}
+        sort={sort}
+        onFilter={(value) => void setParams({ filter: value, page: 1 })}
+        onSort={(value) => void setParams({ sort: value, page: 1 })}
+        onPage={(value) => void setParams({ page: value })}
+      />
     </>
   );
 }
