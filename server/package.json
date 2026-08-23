@@ -9,7 +9,7 @@
   "scripts": {
     "client:ensure": "node .nextrs/ensure-client.mjs",
     "client:dump": "NEXTRS_SKIP_BUNDLE=1 cargo run --bin linkedin-challenge-server-dump-openapi",
-    "client:orval": "orval --config ./.nextrs/client/orval.config.ts",
+    "client:orval": "orval --config ./.nextrs/client/orval.config.ts && node ./.nextrs/client/scripts/generate-barrels.mjs",
     "client:build": "tsc --project ./.nextrs/client/tsconfig.json && node ./.nextrs/client/scripts/normalize-esm.mjs",
     "client:prepare": "npm run client:ensure && npm run client:dump && npm run client:orval",
     "client:release": "npm run client:prepare && npm run client:build",

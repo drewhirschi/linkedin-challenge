@@ -42,7 +42,57 @@ pub async fn connect() -> Db {
     .await;
     add_column(
         &mut db,
+        "ALTER TABLE members ADD COLUMN is_system_admin BOOLEAN NOT NULL DEFAULT FALSE",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE admin_sessions ADD COLUMN impersonator_id BIGINT",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE competitions ADD COLUMN per_send DOUBLE PRECISION NOT NULL DEFAULT 0",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE competitions ADD COLUMN per_save DOUBLE PRECISION NOT NULL DEFAULT 0",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE post_snapshots ADD COLUMN sends BIGINT",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE post_snapshots ADD COLUMN saves BIGINT",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE post_snapshots ADD COLUMN impressions_in_network BIGINT",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE post_snapshots ADD COLUMN impressions_out_of_network BIGINT",
+    )
+    .await;
+    add_column(
+        &mut db,
         "ALTER TABLE post_snapshots ADD COLUMN members_reached BIGINT",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE post_snapshots ADD COLUMN profile_viewers_from_post BIGINT",
+    )
+    .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE post_snapshots ADD COLUMN followers_from_post BIGINT",
     )
     .await;
     add_column(
@@ -65,6 +115,22 @@ pub async fn connect() -> Db {
     execute_migration(
         &mut db,
         "CREATE UNIQUE INDEX IF NOT EXISTS challenge_memberships_challenge_member ON challenge_memberships (challenge_id, member_id)",
+    )
+    .await;
+    let post_comments_table = if url.starts_with("postgres:") || url.starts_with("postgresql:") {
+        "CREATE TABLE IF NOT EXISTS post_comments (id BIGSERIAL PRIMARY KEY, post_id BIGINT NOT NULL, urn TEXT NOT NULL, commenter_urn TEXT NOT NULL, commenter_name TEXT, is_self BOOLEAN NOT NULL, created_at BIGINT NOT NULL, captured_at BIGINT NOT NULL)"
+    } else {
+        "CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id BIGINT NOT NULL, urn TEXT NOT NULL, commenter_urn TEXT NOT NULL, commenter_name TEXT, is_self BOOLEAN NOT NULL, created_at BIGINT NOT NULL, captured_at BIGINT NOT NULL)"
+    };
+    execute_migration(&mut db, post_comments_table).await;
+    execute_migration(
+        &mut db,
+        "CREATE UNIQUE INDEX IF NOT EXISTS post_comments_urn ON post_comments (urn)",
+    )
+    .await;
+    execute_migration(
+        &mut db,
+        "CREATE INDEX IF NOT EXISTS post_comments_post_id ON post_comments (post_id)",
     )
     .await;
     add_column(

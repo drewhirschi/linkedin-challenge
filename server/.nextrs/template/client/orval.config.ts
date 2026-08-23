@@ -14,7 +14,7 @@ export default defineConfig({
     input: "../openapi.json",
     output: {
       mode: "tags-split",
-      target: "./src/generated/fetch",
+      target: "./src/generated/fetch/index.ts",
       schemas: "./src/generated/fetch/model",
       client: "fetch",
       httpClient: "fetch",
@@ -27,7 +27,7 @@ export default defineConfig({
     input: "../openapi.json",
     output: {
       mode: "tags-split",
-      target: "./src/generated/react-query",
+      target: "./src/generated/react-query/index.ts",
       schemas: "./src/generated/react-query/model",
       client: "react-query",
       httpClient: "fetch",
