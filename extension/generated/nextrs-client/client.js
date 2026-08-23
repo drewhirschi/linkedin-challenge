@@ -17,34 +17,6 @@ export const getChallengeAggregate = async (params, options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
-export const getCreateChallengeUrl = () => {
-    return `/api/admin/challenges`;
-};
-export const createChallenge = async (createChallengeRequest, options) => {
-    const res = await fetch(getCreateChallengeUrl(), {
-        ...options,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: JSON.stringify(createChallengeRequest)
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
-export const getCreateInvitesUrl = () => {
-    return `/api/admin/invites`;
-};
-export const createInvites = async (createInvitesRequest, options) => {
-    const res = await fetch(getCreateInvitesUrl(), {
-        ...options,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: JSON.stringify(createInvitesRequest)
-    });
-    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-    const data = body ? JSON.parse(body) : {};
-    return { data, status: res.status, headers: res.headers };
-};
 export const getGetAdminOverviewUrl = () => {
     return `/api/admin/overview`;
 };
@@ -150,6 +122,60 @@ export const getChallenges = async (options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
+export const getCreateChallengeUrl = () => {
+    return `/api/challenges`;
+};
+export const createChallenge = async (createChallengeRequest, options) => {
+    const res = await fetch(getCreateChallengeUrl(), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(createChallengeRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getSetChallengeFavoriteUrl = (id) => {
+    return `/api/challenges/${id}/favorite`;
+};
+export const setChallengeFavorite = async (id, favoriteChallengeRequest, options) => {
+    const res = await fetch(getSetChallengeFavoriteUrl(id), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(favoriteChallengeRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetChallengeInvitesUrl = (id) => {
+    return `/api/challenges/${id}/invites`;
+};
+export const getChallengeInvites = async (id, options) => {
+    const res = await fetch(getGetChallengeInvitesUrl(id), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getCreateInvitesUrl = (id) => {
+    return `/api/challenges/${id}/invites`;
+};
+export const createInvites = async (id, createInvitesRequest, options) => {
+    const res = await fetch(getCreateInvitesUrl(id), {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(createInvitesRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
 ;
 export const getHealthUrl = () => {
     return `/api/health`;
@@ -158,6 +184,18 @@ export const health = async (options) => {
     const res = await fetch(getHealthUrl(), {
         ...options,
         method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getAcceptChallengeInviteUrl = (code) => {
+    return `/api/invites/${code}/accept`;
+};
+export const acceptChallengeInvite = async (code, options) => {
+    const res = await fetch(getAcceptChallengeInviteUrl(code), {
+        ...options,
+        method: 'POST'
     });
     const body = [204, 205, 304].includes(res.status) ? null : await res.text();
     const data = body ? JSON.parse(body) : {};
@@ -191,6 +229,37 @@ export const linkIdentity = async (linkRequest, options) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
         body: JSON.stringify(linkRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetMyInvitesUrl = () => {
+    return `/api/me/invites`;
+};
+export const getMyInvites = async (options) => {
+    const res = await fetch(getGetMyInvitesUrl(), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetMyPostsUrl = (params) => {
+    const normalizedParams = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined) {
+            normalizedParams.append(key, value === null ? 'null' : value.toString());
+        }
+    });
+    const stringifiedParams = normalizedParams.toString();
+    return stringifiedParams.length > 0 ? `/api/me/posts?${stringifiedParams}` : `/api/me/posts`;
+};
+export const getMyPosts = async (params, options) => {
+    const res = await fetch(getGetMyPostsUrl(params), {
+        ...options,
+        method: 'GET'
     });
     const body = [204, 205, 304].includes(res.status) ? null : await res.text();
     const data = body ? JSON.parse(body) : {};

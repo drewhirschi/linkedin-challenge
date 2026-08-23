@@ -4,6 +4,9 @@
  * linkedin-challenge-server
  * OpenAPI spec version: 0.1.0
  */
+export interface AcceptInviteResponse {
+    challengeId: number;
+}
 export type AdminOverviewCurrent = null | CompetitionInfo;
 export interface AdminOverview {
     adminName: string;
@@ -13,7 +16,6 @@ export interface AdminOverview {
     /** Sensible defaults for the "new competition" form. */
     defaults: ScoringConfig;
     invites: InviteRow[];
-    org: OrgSummary;
     standings: StandingRow[];
 }
 /**
@@ -46,6 +48,9 @@ and the extension can rely on `{ "error": "..." }` regardless of status.
 export interface ApiError {
     error: string;
 }
+export interface ChallengeInvitesResponse {
+    invites: InviteRow[];
+}
 export type ChallengeListCurrent = null | CompetitionInfo;
 /**
  * The org's challenges, newest first, with the one the app shows by default.
@@ -53,7 +58,6 @@ export type ChallengeListCurrent = null | CompetitionInfo;
 export interface ChallengeList {
     challenges: CompetitionInfo[];
     current?: ChallengeListCurrent;
-    org: OrgSummary;
 }
 export type CommentPayloadCommenterName = string | null;
 export type CommentPayloadCreatedAt = string | null;
@@ -69,36 +73,31 @@ export interface CompetitionInfo {
     endAt: number;
     id: number;
     isActive: boolean;
+    isFavorite: boolean;
+    isOwner: boolean;
     name: string;
     startAt: number;
 }
 export interface CreateChallengeRequest {
     config: ScoringConfig;
-    /** `YYYY-MM-DD`, inclusive through end of day. */
     end: string;
     name: string;
-    /** `YYYY-MM-DD`. */
     start: string;
 }
 export interface CreateChallengeResponse {
     id: number;
 }
-/**
- * @minimum 0
- */
-export type CreateInvitesRequestCount = number | null;
-/**
- * `"participant"` (default) or `"admin"`.
- */
-export type CreateInvitesRequestRole = string | null;
 export interface CreateInvitesRequest {
-    /** @minimum 0 */
-    count?: CreateInvitesRequestCount;
-    /** `"participant"` (default) or `"admin"`. */
-    role?: CreateInvitesRequestRole;
+    emails: string[];
 }
 export interface CreateInvitesResponse {
     codes: string[];
+}
+export interface FavoriteChallengeRequest {
+    favorite: boolean;
+}
+export interface FavoriteChallengeResponse {
+    ok: boolean;
 }
 export interface Health {
     ok: boolean;
@@ -110,9 +109,11 @@ export interface ImpersonateResponse {
     displayName: string;
     ok: boolean;
 }
+export type InviteRowEmail = string | null;
 export interface InviteRow {
     code: string;
     createdAt: number;
+    email?: InviteRowEmail;
     redeemed: boolean;
     role: string;
 }
@@ -141,7 +142,6 @@ export interface Leaderboard {
     /** The org's other challenges, for the board's switcher. */
     challenges: CompetitionInfo[];
     competition?: LeaderboardCompetition;
-    org: OrgSummary;
     standings: StandingRow[];
 }
 export interface LinkRequest {
@@ -188,9 +188,16 @@ export interface MemberDetail {
     competition?: MemberDetailCompetition;
     displayName: string;
     memberId: number;
-    org: OrgSummary;
     /** Posts we hold that fall outside the competition window. */
     outsideWindow: PostStat[];
+    /** @minimum 0 */
+    postCount: number;
+    /** @minimum 0 */
+    postPage: number;
+    /** @minimum 0 */
+    postPageCount: number;
+    /** Server-filtered, server-sorted page used by the post explorer. */
+    posts: PostStat[];
     profileUrl?: MemberDetailProfileUrl;
     standing?: MemberDetailStanding;
     weeks: WeekGroup[];
@@ -230,9 +237,25 @@ export interface Metrics {
     saves?: MetricsSaves;
     sends?: MetricsSends;
 }
-export interface OrgSummary {
-    name: string;
-    slug: string;
+export interface MyInvitesResponse {
+    invites: PendingChallengeInvite[];
+}
+export interface PendingChallengeInvite {
+    challengeId: number;
+    challengeName: string;
+    code: string;
+    endAt: number;
+    invitedBy: string;
+    startAt: number;
+}
+export interface PostPage {
+    /** @minimum 0 */
+    page: number;
+    /** @minimum 0 */
+    pageCount: number;
+    posts: PostStat[];
+    /** @minimum 0 */
+    total: number;
 }
 export type PostPayloadCreatedAt = string | null;
 export type PostPayloadTextPreview = string | null;
@@ -323,7 +346,6 @@ export interface SessionResponse {
 export interface SignupRequest {
     email: string;
     name: string;
-    orgName: string;
     password: string;
 }
 export interface SignupResponse {
@@ -413,15 +435,37 @@ export type GetChallengeAggregateParams = {
 };
 export type GetLeaderboardParams = {
     /**
-     * A specific challenge to rank; omitted means the org's current one.
+     * A specific joined challenge to rank; omitted means the viewer's current one.
      */
     challengeId?: number | null;
 };
+export type GetMyPostsParams = {
+    filter?: string | null;
+    sort?: string | null;
+    /**
+     * @minimum 0
+     */
+    page?: number | null;
+    /**
+     * @minimum 0
+     */
+    pageSize?: number | null;
+};
 export type GetMemberDetailParams = {
     /**
-     * The challenge window to bucket posts into; omitted means the org's current one.
+     * Challenge granting access and defining the scoring window; omit only for your own data.
      */
     challengeId?: number | null;
+    filter?: string | null;
+    sort?: string | null;
+    /**
+     * @minimum 0
+     */
+    page?: number | null;
+    /**
+     * @minimum 0
+     */
+    pageSize?: number | null;
 };
 export type HTTPStatusCode1xx = 100 | 101 | 102 | 103;
 export type HTTPStatusCode2xx = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207;
@@ -446,44 +490,6 @@ export type getChallengeAggregateResponseError = (getChallengeAggregateResponseD
 export type getChallengeAggregateResponse = (getChallengeAggregateResponseSuccess | getChallengeAggregateResponseError);
 export declare const getGetChallengeAggregateUrl: (params: GetChallengeAggregateParams) => string;
 export declare const getChallengeAggregate: (params: GetChallengeAggregateParams, options?: RequestInit) => Promise<getChallengeAggregateResponse>;
-export type createChallengeResponse200 = {
-    data: CreateChallengeResponse;
-    status: 200;
-};
-export type createChallengeResponse400 = {
-    data: ApiError;
-    status: 400;
-};
-export type createChallengeResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type createChallengeResponseSuccess = (createChallengeResponse200) & {
-    headers: Headers;
-};
-export type createChallengeResponseError = (createChallengeResponse400 | createChallengeResponse401) & {
-    headers: Headers;
-};
-export type createChallengeResponse = (createChallengeResponseSuccess | createChallengeResponseError);
-export declare const getCreateChallengeUrl: () => string;
-export declare const createChallenge: (createChallengeRequest: CreateChallengeRequest, options?: RequestInit) => Promise<createChallengeResponse>;
-export type createInvitesResponse200 = {
-    data: CreateInvitesResponse;
-    status: 200;
-};
-export type createInvitesResponse401 = {
-    data: ApiError;
-    status: 401;
-};
-export type createInvitesResponseSuccess = (createInvitesResponse200) & {
-    headers: Headers;
-};
-export type createInvitesResponseError = (createInvitesResponse401) & {
-    headers: Headers;
-};
-export type createInvitesResponse = (createInvitesResponseSuccess | createInvitesResponseError);
-export declare const getCreateInvitesUrl: () => string;
-export declare const createInvites: (createInvitesRequest: CreateInvitesRequest, options?: RequestInit) => Promise<createInvitesResponse>;
 export type getAdminOverviewResponse200 = {
     data: AdminOverview;
     status: 200;
@@ -628,6 +634,74 @@ export type getChallengesResponseError = (getChallengesResponseDefault) & {
 export type getChallengesResponse = (getChallengesResponseSuccess | getChallengesResponseError);
 export declare const getGetChallengesUrl: () => string;
 export declare const getChallenges: (options?: RequestInit) => Promise<getChallengesResponse>;
+export type createChallengeResponse200 = {
+    data: CreateChallengeResponse;
+    status: 200;
+};
+export type createChallengeResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type createChallengeResponseSuccess = (createChallengeResponse200) & {
+    headers: Headers;
+};
+export type createChallengeResponseError = (createChallengeResponseDefault) & {
+    headers: Headers;
+};
+export type createChallengeResponse = (createChallengeResponseSuccess | createChallengeResponseError);
+export declare const getCreateChallengeUrl: () => string;
+export declare const createChallenge: (createChallengeRequest: CreateChallengeRequest, options?: RequestInit) => Promise<createChallengeResponse>;
+export type setChallengeFavoriteResponse200 = {
+    data: FavoriteChallengeResponse;
+    status: 200;
+};
+export type setChallengeFavoriteResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type setChallengeFavoriteResponseSuccess = (setChallengeFavoriteResponse200) & {
+    headers: Headers;
+};
+export type setChallengeFavoriteResponseError = (setChallengeFavoriteResponseDefault) & {
+    headers: Headers;
+};
+export type setChallengeFavoriteResponse = (setChallengeFavoriteResponseSuccess | setChallengeFavoriteResponseError);
+export declare const getSetChallengeFavoriteUrl: (id: number) => string;
+export declare const setChallengeFavorite: (id: number, favoriteChallengeRequest: FavoriteChallengeRequest, options?: RequestInit) => Promise<setChallengeFavoriteResponse>;
+export type getChallengeInvitesResponse200 = {
+    data: ChallengeInvitesResponse;
+    status: 200;
+};
+export type getChallengeInvitesResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getChallengeInvitesResponseSuccess = (getChallengeInvitesResponse200) & {
+    headers: Headers;
+};
+export type getChallengeInvitesResponseError = (getChallengeInvitesResponseDefault) & {
+    headers: Headers;
+};
+export type getChallengeInvitesResponse = (getChallengeInvitesResponseSuccess | getChallengeInvitesResponseError);
+export declare const getGetChallengeInvitesUrl: (id: number) => string;
+export declare const getChallengeInvites: (id: number, options?: RequestInit) => Promise<getChallengeInvitesResponse>;
+export type createInvitesResponse200 = {
+    data: CreateInvitesResponse;
+    status: 200;
+};
+export type createInvitesResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type createInvitesResponseSuccess = (createInvitesResponse200) & {
+    headers: Headers;
+};
+export type createInvitesResponseError = (createInvitesResponseDefault) & {
+    headers: Headers;
+};
+export type createInvitesResponse = (createInvitesResponseSuccess | createInvitesResponseError);
+export declare const getCreateInvitesUrl: (id: number) => string;
+export declare const createInvites: (id: number, createInvitesRequest: CreateInvitesRequest, options?: RequestInit) => Promise<createInvitesResponse>;
 /**
  * @summary Liveness probe
  */
@@ -641,6 +715,23 @@ export type healthResponseSuccess = (healthResponse200) & {
 export type healthResponse = (healthResponseSuccess);
 export declare const getHealthUrl: () => string;
 export declare const health: (options?: RequestInit) => Promise<healthResponse>;
+export type acceptChallengeInviteResponse200 = {
+    data: AcceptInviteResponse;
+    status: 200;
+};
+export type acceptChallengeInviteResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type acceptChallengeInviteResponseSuccess = (acceptChallengeInviteResponse200) & {
+    headers: Headers;
+};
+export type acceptChallengeInviteResponseError = (acceptChallengeInviteResponseDefault) & {
+    headers: Headers;
+};
+export type acceptChallengeInviteResponse = (acceptChallengeInviteResponseSuccess | acceptChallengeInviteResponseError);
+export declare const getAcceptChallengeInviteUrl: (code: string) => string;
+export declare const acceptChallengeInvite: (code: string, options?: RequestInit) => Promise<acceptChallengeInviteResponse>;
 export type getLeaderboardResponse200 = {
     data: Leaderboard;
     status: 200;
@@ -679,6 +770,40 @@ export type linkIdentityResponseError = (linkIdentityResponse401 | linkIdentityR
 export type linkIdentityResponse = (linkIdentityResponseSuccess | linkIdentityResponseError);
 export declare const getLinkIdentityUrl: () => string;
 export declare const linkIdentity: (linkRequest: LinkRequest, options?: RequestInit) => Promise<linkIdentityResponse>;
+export type getMyInvitesResponse200 = {
+    data: MyInvitesResponse;
+    status: 200;
+};
+export type getMyInvitesResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getMyInvitesResponseSuccess = (getMyInvitesResponse200) & {
+    headers: Headers;
+};
+export type getMyInvitesResponseError = (getMyInvitesResponseDefault) & {
+    headers: Headers;
+};
+export type getMyInvitesResponse = (getMyInvitesResponseSuccess | getMyInvitesResponseError);
+export declare const getGetMyInvitesUrl: () => string;
+export declare const getMyInvites: (options?: RequestInit) => Promise<getMyInvitesResponse>;
+export type getMyPostsResponse200 = {
+    data: PostPage;
+    status: 200;
+};
+export type getMyPostsResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type getMyPostsResponseSuccess = (getMyPostsResponse200) & {
+    headers: Headers;
+};
+export type getMyPostsResponseError = (getMyPostsResponseDefault) & {
+    headers: Headers;
+};
+export type getMyPostsResponse = (getMyPostsResponseSuccess | getMyPostsResponseError);
+export declare const getGetMyPostsUrl: (params?: GetMyPostsParams) => string;
+export declare const getMyPosts: (params?: GetMyPostsParams, options?: RequestInit) => Promise<getMyPostsResponse>;
 export type getMemberDetailResponse200 = {
     data: MemberDetail;
     status: 200;
