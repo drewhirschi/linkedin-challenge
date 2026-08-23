@@ -34,12 +34,24 @@ extension-release server_url:
     [[ "{{server_url}}" == https://* ]] || { echo "release URL must use https" >&2; exit 1; }
     cd extension && ./build.sh "{{server_url}}"
 
+# Run the fast checks not already guaranteed by Vercel's release cross-build.
+deploy-check:
+    node --check extension/api.js
+    node --check extension/background.js
+    node --check extension/config.js
+    node --check extension/linkedin.js
+    node --check extension/popup.js
+    node --check extension/storage.js
+    node --check extension/sync.js
+    bash -n extension/build.sh
+    git diff --check
+
 # Build, verify, and deploy the server to the linked Vercel production project.
-deploy: check
+deploy: deploy-check
     cd server && ./scripts/deploy-prebuilt.sh
 
 # Build, verify, and deploy an unaliased Vercel preview.
-deploy-preview: check
+deploy-preview: deploy-check
     cd server && ./scripts/deploy-prebuilt.sh --preview
 
 # Compile and check the server and extension without requiring a live browser session.

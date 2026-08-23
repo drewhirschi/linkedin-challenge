@@ -28,6 +28,22 @@ else
   exit 1
 fi
 
+# The native release build bundles the React pages, which import the generated API client. Refresh
+# that contract only when its Rust sources changed. Vercel then performs two distinct release
+# outputs: the native build creates browser assets while Node dependencies are resolvable, and the
+# Linux cross-build creates the Lambda binary. A clean checkout has no ignored generated client,
+# so its first deploy refreshes once; normal deploys reuse the client produced by `cargo dev`.
+CONTRACT=.nextrs/openapi.json
+GENERATED=.nextrs/client/src/generated/fetch/index.ts
+if [ ! -f "$CONTRACT" ] || [ ! -f "$GENERATED" ] || \
+   find app/api src -type f -name '*.rs' -newer "$CONTRACT" -print -quit | grep -q .; then
+  echo "API contract changed; regenerating the client"
+  npm run client:release
+else
+  echo "API contract is current; reusing the generated client"
+fi
+npm run typecheck
+
 "${VERCEL[@]}" pull --yes --environment=production > /dev/null
 "${VERCEL[@]}" build "${FLAGS[@]}"
 

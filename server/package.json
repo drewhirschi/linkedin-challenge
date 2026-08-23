@@ -12,6 +12,7 @@
     "client:orval": "orval --config ./.nextrs/client/orval.config.ts",
     "client:build": "tsc --project ./.nextrs/client/tsconfig.json && node ./.nextrs/client/scripts/normalize-esm.mjs",
     "client:prepare": "npm run client:ensure && npm run client:dump && npm run client:orval",
+    "client:release": "npm run client:prepare && npm run client:build",
     "client:generate": "npm run client:prepare && cargo build && npm run client:build",
     "typecheck": "tsc --project tsconfig.json"
   },
