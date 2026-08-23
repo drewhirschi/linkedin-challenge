@@ -1,10 +1,15 @@
 // Challenges the signed-in user has explicitly joined.
 import { useGetChallenges, useSetChallengeFavorite } from "@linkedin-challenge/client/react-query";
+import { getGetChallengesQueryKey } from "@linkedin-challenge/client/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { fmtDate } from "../../components/format";
 
 export default function ChallengesPage() {
-  const { data, isLoading, refetch } = useGetChallenges();
+  const { data, isLoading } = useGetChallenges();
   const favorite = useSetChallengeFavorite();
+  const queryClient = useQueryClient();
+  const [favoriteOverrides, setFavoriteOverrides] = useState<Record<number, boolean>>({});
 
   if (isLoading) return <div className="spinner">Loading…</div>;
   if (data?.status !== 200) {
@@ -41,7 +46,9 @@ export default function ChallengesPage() {
               </tr>
             </thead>
             <tbody>
-              {challenges.map((c) => (
+              {challenges.map((c) => {
+                const isFavorite = favoriteOverrides[c.id] ?? c.isFavorite;
+                return (
                 <tr key={c.id}>
                   <td>
                     <a href={`/challenges/${c.id}`}>{c.name}</a>
@@ -51,14 +58,26 @@ export default function ChallengesPage() {
                     <button
                       className="btn ghost sm favorite-button"
                       type="button"
-                      aria-label={c.isFavorite ? `Unfavorite ${c.name}` : `Favorite ${c.name}`}
-                      aria-pressed={c.isFavorite}
-                      onClick={() => favorite.mutate(
-                        { id: c.id, data: { favorite: !c.isFavorite } },
-                        { onSuccess: () => void refetch() },
-                      )}
+                      aria-label={isFavorite ? `Unfavorite ${c.name}` : `Favorite ${c.name}`}
+                      aria-pressed={isFavorite}
+                      onClick={() => {
+                        const next = !isFavorite;
+                        setFavoriteOverrides((current) => ({ ...current, [c.id]: next }));
+                        favorite.mutate(
+                          { id: c.id, data: { favorite: next } },
+                          {
+                            onError: () => setFavoriteOverrides((current) => ({
+                              ...current,
+                              [c.id]: isFavorite,
+                            })),
+                            onSettled: () => void queryClient.invalidateQueries({
+                            queryKey: getGetChallengesQueryKey(),
+                            }),
+                          },
+                        );
+                      }}
                     >
-                      {c.isFavorite ? "★" : "☆"}
+                      {isFavorite ? "★" : "☆"}
                     </button>
                   </td>
                   <td className="small muted">
@@ -70,7 +89,8 @@ export default function ChallengesPage() {
                     </span>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

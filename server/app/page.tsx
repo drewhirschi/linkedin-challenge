@@ -21,7 +21,7 @@ function AdminStrip({ challengeId, enabled }: { challengeId: number; enabled: bo
     ["Reactions", fmtInt(a.totalReactions)],
     ["Comments", fmtInt(a.totalComments)],
     ["Reposts", fmtInt(a.totalReposts)],
-    ["Combined followers", fmtInt(a.totalFollowers)],
+    ["Latest reported followers", fmtInt(a.totalFollowers)],
     ["Points awarded", fmtNum(a.totalPoints)],
     ["Invites", `${a.invitesRedeemed} used / ${a.invitesOpen} open`],
   ];

@@ -90,7 +90,11 @@ function Sidebar() {
               <SideLink href="/me" pathname={pathname}>My posts</SideLink>
               <div className="nav-section">Challenges</div>
               <SideLink href="/challenges" pathname={pathname}>All challenges</SideLink>
-              {challenges.filter((challenge) => challenge.isFavorite || pathname.startsWith(`/challenges/${challenge.id}`)).map((challenge) => {
+              <SideLink href="/admin/challenges" pathname={pathname}>Create a challenge</SideLink>
+              {challenges.some((challenge) => challenge.isFavorite) && (
+                <div className="nav-subsection">Favorites</div>
+              )}
+              {challenges.filter((challenge) => challenge.isFavorite).map((challenge) => {
                 const base = `/challenges/${challenge.id}`;
                 const open = pathname === base || pathname.startsWith(`${base}/`);
                 return (
@@ -101,17 +105,13 @@ function Sidebar() {
                         <SideLink href={base} pathname={pathname} nested>Leaderboard</SideLink>
                         <SideLink href={`${base}/scoring`} pathname={pathname} nested>How scoring works</SideLink>
                         {challenge.isOwner && (
-                          <>
-                            <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>
-                            <SideLink href={`${base}/manage`} pathname={pathname} nested>Management</SideLink>
-                          </>
+                          <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>
                         )}
                       </>
                     )}
                   </div>
                 );
               })}
-              <SideLink href="/admin/challenges" pathname={pathname}>Create a challenge</SideLink>
 
               {me.isSystemAdmin && (
                 <>
