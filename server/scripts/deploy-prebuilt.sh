@@ -19,8 +19,17 @@ cd "$(dirname "$0")/.."
 
 [ "${1:-}" = "--preview" ] && FLAGS=() || FLAGS=(--prod)
 
-vercel pull --yes --environment=production > /dev/null
-vercel build "${FLAGS[@]}"
+if command -v vercel >/dev/null 2>&1; then
+  VERCEL=(vercel)
+elif npx --no-install vercel --version >/dev/null 2>&1; then
+  VERCEL=(npx --no-install vercel)
+else
+  echo "ERROR: Vercel CLI is not installed in this project or on PATH." >&2
+  exit 1
+fi
+
+"${VERCEL[@]}" pull --yes --environment=production > /dev/null
+"${VERCEL[@]}" build "${FLAGS[@]}"
 
 # Refuse to ship if the Rust function silently failed to build (the classic
 # missing-cargo-zigbuild failure: everything green, no binary in the output).
@@ -29,4 +38,4 @@ if ! find .vercel/output/functions -name '*.func' -type d 2>/dev/null | grep -q 
   exit 1
 fi
 
-vercel deploy --prebuilt "${FLAGS[@]}"
+"${VERCEL[@]}" deploy --prebuilt "${FLAGS[@]}"
