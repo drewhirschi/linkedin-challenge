@@ -12,7 +12,7 @@ use nextrs::conventions::MiddlewareResult;
 ///  * the auth API those surfaces post to;
 ///  * the extension protocol, which authenticates with a bearer sync token instead of the cookie.
 fn is_public(path: &str) -> bool {
-    matches!(path, "/auth/login" | "/auth/signup" | "/auth/join")
+    matches!(path, "/auth/login" | "/auth/signup" | "/auth/join" | "/privacy")
         || path.starts_with("/api/auth/")
         // Liveness must answer without a session, or a load balancer sees a redirect.
         || path == "/api/health"

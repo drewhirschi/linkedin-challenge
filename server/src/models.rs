@@ -56,11 +56,12 @@ pub async fn connect() -> Db {
     )
     .await;
     add_column(&mut db, "ALTER TABLE invites ADD COLUMN email TEXT").await;
-    execute_migration(
-        &mut db,
-        "CREATE TABLE IF NOT EXISTS challenge_memberships (id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id BIGINT NOT NULL, member_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)",
-    )
-    .await;
+    let membership_table = if url.starts_with("postgres:") || url.starts_with("postgresql:") {
+        "CREATE TABLE IF NOT EXISTS challenge_memberships (id BIGSERIAL PRIMARY KEY, challenge_id BIGINT NOT NULL, member_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)"
+    } else {
+        "CREATE TABLE IF NOT EXISTS challenge_memberships (id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id BIGINT NOT NULL, member_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)"
+    };
+    execute_migration(&mut db, membership_table).await;
     execute_migration(
         &mut db,
         "CREATE UNIQUE INDEX IF NOT EXISTS challenge_memberships_challenge_member ON challenge_memberships (challenge_id, member_id)",
