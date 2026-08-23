@@ -13,7 +13,7 @@ use utoipa::ToSchema;
 
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateInvitesRequest { pub count: Option<u32> }
+pub struct CreateInvitesRequest { pub emails: Vec<String> }
 
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +39,7 @@ pub async fn get(
     Ok(Json(ChallengeInvitesResponse {
         invites: invites.into_iter().map(|invite| InviteRow {
             code: invite.code,
+            email: invite.email,
             role: invite.role,
             redeemed: invite.redeemed,
             created_at: invite.created_at,
@@ -57,13 +58,35 @@ pub async fn post(
     let challenge = Competition::filter_by_id(id).first().exec(&mut db).await?
         .filter(|challenge| challenge.creator_id == creator.id)
         .ok_or_else(|| ApiError::not_found("challenge not found"))?;
+    let mut emails: Vec<String> = req.emails.into_iter()
+        .map(|email| email.trim().to_lowercase())
+        .filter(|email| !email.is_empty())
+        .collect();
+    emails.sort();
+    emails.dedup();
+    if emails.is_empty() {
+        return Err(ApiError::bad_request("enter at least one email address"));
+    }
+    if emails.len() > 100 {
+        return Err(ApiError::bad_request("invite at most 100 people at a time"));
+    }
+    if let Some(email) = emails.iter().find(|email| !valid_email(email)) {
+        return Err(ApiError::bad_request(format!("invalid email address: {email}")));
+    }
+
+    let existing = Invite::filter(Invite::fields().challenge_id().eq(challenge.id))
+        .exec(&mut db).await?;
     let mut codes = Vec::new();
-    for _ in 0..req.count.unwrap_or(1).clamp(1, 100) {
+    for email in emails {
+        if existing.iter().any(|invite| !invite.redeemed && invite.email.as_deref() == Some(&email)) {
+            continue;
+        }
         let code = unique_invite_code(&mut db).await?;
         toasty::create!(Invite {
             challenge_id: challenge.id,
             org_id: creator.org_id,
             code: &code,
+            email: Some(email),
             role: "participant",
             redeemed: false,
             created_at: now_unix(),
@@ -71,6 +94,11 @@ pub async fn post(
         codes.push(code);
     }
     Ok(Json(CreateInvitesResponse { codes }))
+}
+
+fn valid_email(email: &str) -> bool {
+    let Some((local, domain)) = email.split_once('@') else { return false };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
 
 async fn unique_invite_code(db: &mut Db) -> ApiResult<String> {

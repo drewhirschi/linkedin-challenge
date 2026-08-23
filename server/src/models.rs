@@ -55,6 +55,7 @@ pub async fn connect() -> Db {
         "ALTER TABLE invites ADD COLUMN challenge_id BIGINT NOT NULL DEFAULT 0",
     )
     .await;
+    add_column(&mut db, "ALTER TABLE invites ADD COLUMN email TEXT").await;
     execute_migration(
         &mut db,
         "CREATE TABLE IF NOT EXISTS challenge_memberships (id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id BIGINT NOT NULL, member_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)",
@@ -178,6 +179,8 @@ pub struct Invite {
 
     #[unique]
     pub code: String,
+    /// Intended recipient. Legacy generic codes have no recipient and remain redeemable.
+    pub email: Option<String>,
     /// "participant" or "admin".
     pub role: String,
     pub redeemed: bool,

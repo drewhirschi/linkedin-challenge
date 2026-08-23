@@ -71,6 +71,11 @@ pub async fn post(
         .ok_or_else(|| ApiError::not_found("account storage unavailable"))?;
 
     let email = req.email.trim().to_lowercase();
+    if invite.email.as_deref().is_some_and(|recipient| recipient != email) {
+        return Err(ApiError::bad_request(
+            "this invitation was issued to a different email address",
+        ));
+    }
     // Until the extension pairs a real LinkedIn identity, the unique URN column holds a placeholder
     // derived from the email — see `app/api/link/route.rs`, which swaps in the real URN.
     let urn = format!("pending:{email}");

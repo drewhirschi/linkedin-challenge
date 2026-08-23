@@ -33,7 +33,6 @@ const LABELS: Record<string, string> = {
   "/rules": "How scoring works",
   "/admin": "My challenge overview",
   "/admin/challenges": "Create a challenge",
-  "/admin/invites": "Invites",
   "/system": "All organizations",
 };
 const label = (href: string) => LABELS[href] ?? href;

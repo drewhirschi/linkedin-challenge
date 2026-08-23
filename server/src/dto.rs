@@ -178,6 +178,7 @@ pub struct PostPage {
 #[serde(rename_all = "camelCase")]
 pub struct InviteRow {
     pub code: String,
+    pub email: Option<String>,
     pub role: String,
     pub redeemed: bool,
     pub created_at: i64,
@@ -803,6 +804,7 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
             .into_iter()
             .map(|i| InviteRow {
                 code: i.code,
+                email: i.email,
                 role: i.role,
                 redeemed: i.redeemed,
                 created_at: i.created_at,

@@ -122,11 +122,11 @@ tbody tr:hover { background: #f7fafc; }
 .field { display: block; margin-bottom: 14px; }
 .field span, .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
 .field.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-input, select {
+input, select, textarea {
   width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
-  font-size: 14px; background: #fff; color: var(--fg);
+  font: inherit; font-size: 14px; background: #fff; color: var(--fg); resize: vertical;
 }
-input:focus, select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(10,102,194,.12); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(10,102,194,.12); }
 
 button, .btn {
   display: inline-block; padding: 9px 16px; border-radius: 8px; border: 1px solid transparent;
@@ -210,7 +210,7 @@ ul.plain li:last-child { border-bottom: none; }
   .impersonation { background: #33290f; border-color: #57431a; color: #e3c26b; }
   .btn.ghost:hover { background: #232b32; }
   .password-toggle:hover { background: #233243; }
-  input, select { background: #141a1f; }
+  input, select, textarea { background: #141a1f; }
   .code, .badge.muted { background: #232b32; }
 }
 

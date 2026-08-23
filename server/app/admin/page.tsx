@@ -68,7 +68,7 @@ export default function AdminOverviewPage() {
           {standings.length === 0 ? (
             <div className="empty">
               Nobody is scoring yet. Standings appear once people connect the extension. Check{" "}
-              <a href="/admin/invites">invites</a> if the team hasn&rsquo;t joined.
+              <a href={`/challenges/${current.id}/invites`}>invites</a> if the team hasn&rsquo;t joined.
             </div>
           ) : (
             <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
