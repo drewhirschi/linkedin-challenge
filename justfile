@@ -34,6 +34,14 @@ extension-release server_url:
     [[ "{{server_url}}" == https://* ]] || { echo "release URL must use https" >&2; exit 1; }
     cd extension && ./build.sh "{{server_url}}"
 
+# Build, verify, and deploy the server to the linked Vercel production project.
+deploy: check
+    cd server && ./scripts/deploy-prebuilt.sh
+
+# Build, verify, and deploy an unaliased Vercel preview.
+deploy-preview: check
+    cd server && ./scripts/deploy-prebuilt.sh --preview
+
 # Compile and check the server and extension without requiring a live browser session.
 check:
     cd server && npm run client:ensure
