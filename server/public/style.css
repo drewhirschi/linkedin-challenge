@@ -50,6 +50,8 @@ a:hover { text-decoration: underline; }
 .nav-link.nested { margin-left: 14px; padding-top: 7px; padding-bottom: 7px; font-size: 13px; }
 .challenge-nav { display: grid; gap: 2px; }
 .favorite-button { font-size: 20px; line-height: 1; min-width: 36px; }
+.favorite-button span { color: var(--muted); }
+.favorite-button.selected span { color: var(--gold); }
 .nav-section {
   margin: 16px 10px 4px; font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
@@ -61,6 +63,7 @@ a:hover { text-decoration: underline; }
 
 .side-foot { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
 .side-user { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+.side-account { color: var(--fg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .impersonation {
   background: #fff7e6; border: 1px solid #f0d9a8; color: #8a6116;
   border-radius: 8px; padding: 8px 10px; font-size: 13px;

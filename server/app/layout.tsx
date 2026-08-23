@@ -147,7 +147,7 @@ function Sidebar() {
           </div>
         )}
         <div className="side-user">
-          <span className="muted">{me.displayName}</span>
+          <a href="/account" className="side-account">{me.displayName}</a>
           <button
             className="btn ghost sm"
             type="button"
