@@ -16,11 +16,11 @@ doctor:
     @command -v zip >/dev/null || { echo "missing: zip" >&2; exit 1; }
     @echo "development tools are ready"
 
-# Run the web/API server with the empty local account at http://localhost:3312.
+# Run the web/API server with the local account and idempotent Q3 World Cup seed.
 dev:
     cd server && DATABASE_URL=turso:linkedin.db cargo dev
 
-# Create the empty local account without starting the server.
+# Ensure the local account and Q3 World Cup challenge exist without resetting synced data.
 seed-local:
     cd server && DATABASE_URL=turso:linkedin.db cargo run --bin seed-local
 

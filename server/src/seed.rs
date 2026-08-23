@@ -6,7 +6,7 @@ use toasty::Db;
 use crate::auth::{hash_password, member_by_email};
 use crate::models::{ChallengeMembership, Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot};
 use crate::scoring::ScoringConfig;
-use crate::util::{new_bearer_token, now_unix};
+use crate::util::{new_bearer_token, now_unix, parse_date};
 
 /// Shared password for every seeded demo account.
 pub const DEMO_PASSWORD: &str = "demopassword";
@@ -16,44 +16,109 @@ pub const DEMO_PASSWORD: &str = "demopassword";
 pub const LOCAL_EMAIL: &str = "drew@local.test";
 pub const LOCAL_PASSWORD: &str = "localpassword";
 
-/// Create one empty local organization and account, with no challenges or synthetic LinkedIn
-/// data. Idempotent by email so restarting the development server never resets real synced data.
+/// Ensure the local account and its default challenge exist. This is additive and idempotent:
+/// restarting development never resets real LinkedIn posts or snapshots already synced to SQLite.
 pub async fn seed_local_account(db: &mut Db) -> toasty::Result<()> {
-    if member_by_email(&mut *db, LOCAL_EMAIL).await?.is_some() {
-        return Ok(());
-    }
-
     let now = now_unix();
-    let org = match Org::filter_by_slug("local").first().exec(&mut *db).await? {
-        Some(org) => org,
+    let member = match member_by_email(&mut *db, LOCAL_EMAIL).await? {
+        Some(member) => member,
         None => {
-            toasty::create!(Org {
-                slug: "local",
-                name: "Local Development",
+            let org = match Org::filter_by_slug("local").first().exec(&mut *db).await? {
+                Some(org) => org,
+                None => toasty::create!(Org {
+                    slug: "local",
+                    name: "Local Development",
+                    created_at: now,
+                }).exec(&mut *db).await?,
+            };
+            let (_unused, token_hash) = new_bearer_token();
+            toasty::create!(Member {
+                org_id: org.id,
+                display_name: "Drew",
+                linkedin_urn: format!("pending:{LOCAL_EMAIL}"),
+                public_identifier: "",
+                profile_url: None,
+                is_admin: true,
+                is_system_admin: false,
+                email: Some(LOCAL_EMAIL.to_string()),
+                password_hash: Some(hash_password(LOCAL_PASSWORD)),
+                api_token_hash: token_hash,
                 created_at: now,
-            })
-            .exec(&mut *db)
-            .await?
+            }).exec(&mut *db).await?
         }
     };
 
-    let (_unused, token_hash) = new_bearer_token();
-    toasty::create!(Member {
-        org_id: org.id,
-        display_name: "Drew",
-        linkedin_urn: format!("pending:{LOCAL_EMAIL}"),
-        public_identifier: "",
-        profile_url: None,
-        is_admin: true,
-        is_system_admin: false,
-        email: Some(LOCAL_EMAIL.to_string()),
-        password_hash: Some(hash_password(LOCAL_PASSWORD)),
-        api_token_hash: token_hash,
-        created_at: now,
-    })
-    .exec(&mut *db)
-    .await?;
+    ensure_local_challenge(db, &member).await?;
 
+    Ok(())
+}
+
+async fn ensure_local_challenge(db: &mut Db, member: &Member) -> toasty::Result<()> {
+    let start = parse_date("2026-07-01").expect("valid local challenge start");
+    let end = parse_date("2026-09-30").expect("valid local challenge end") + 86_399;
+    let existing = Competition::all().exec(&mut *db).await?.into_iter()
+        .find(|challenge| challenge.creator_id == member.id && challenge.name == "Q3 World Cup");
+    let challenge = match existing {
+        Some(challenge) => {
+            toasty::update!(Competition::filter_by_id(challenge.id) {
+                start_at: start,
+                end_at: end,
+                max_posts_per_week: 3,
+                per_reaction: 1.0,
+                per_comment: 5.0,
+                per_repost: 5.0,
+                per_send: 5.0,
+                per_save: 3.0,
+                per_impression: 0.01,
+                per_follower_gained: 10.0,
+                per_profile_view: 0.5,
+                normalize_by_followers: true,
+                follower_baseline: 1000,
+                is_active: true,
+            }).exec(&mut *db).await?;
+            challenge
+        }
+        None => toasty::create!(Competition {
+            org_id: member.org_id,
+            creator_id: member.id,
+            name: "Q3 World Cup",
+            start_at: start,
+            end_at: end,
+            max_posts_per_week: 3,
+            per_reaction: 1.0,
+            per_comment: 5.0,
+            per_repost: 5.0,
+            per_send: 5.0,
+            per_save: 3.0,
+            per_impression: 0.01,
+            per_follower_gained: 10.0,
+            per_profile_view: 0.5,
+            normalize_by_followers: true,
+            follower_baseline: 1000,
+            is_active: true,
+            created_at: now_unix(),
+        }).exec(&mut *db).await?,
+    };
+
+    let membership = ChallengeMembership::filter(
+        ChallengeMembership::fields().member_id().eq(member.id),
+    ).exec(&mut *db).await?.into_iter()
+        .find(|membership| membership.challenge_id == challenge.id);
+    match membership {
+        Some(membership) => {
+            toasty::update!(ChallengeMembership::filter_by_id(membership.id) {
+                is_favorite: true,
+            }).exec(&mut *db).await?;
+        }
+        None => {
+            toasty::create!(ChallengeMembership {
+                challenge_id: challenge.id,
+                member_id: member.id,
+                is_favorite: true,
+                joined_at: now_unix(),
+            }).exec(&mut *db).await?;
+        }
+    }
     Ok(())
 }
 

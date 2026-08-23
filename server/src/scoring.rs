@@ -49,7 +49,7 @@ impl Default for ScoringConfig {
         Self {
             max_posts_per_week: 3,
             per_reaction: 1.0,
-            per_comment: 3.0,
+            per_comment: 5.0,
             per_repost: 5.0,
             per_send: 5.0,
             per_save: 3.0,
