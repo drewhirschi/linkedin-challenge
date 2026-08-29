@@ -10,10 +10,10 @@ import { useGetChallenges, useGetMe, useLogout, useStopImpersonation } from "@li
 import { NuqsAdapter } from "nuqs/adapters/tanstack-router";
 
 function NavLink({ href, pathname }: { href: string; pathname: string }) {
-  // Prefix-match so /admin/challenges lights "Challenge setup"; exact-match "/" and "/admin" so
+  // Prefix-match nested challenge routes; exact-match the landing page and owner overview so
   // Leaderboard and Overview don't stay lit for every child underneath them.
   const active =
-    href === "/" || href === "/admin" ? pathname === href : pathname.startsWith(href);
+    href === "/" || href === "/challenges/mine" ? pathname === href : pathname.startsWith(href);
   return (
     <a className={active ? "nav-link active" : "nav-link"} href={href}>
       {label(href)}
@@ -31,9 +31,9 @@ const LABELS: Record<string, string> = {
   "/me": "My results",
   "/challenges": "Challenges",
   "/rules": "How scoring works",
-  "/admin": "My challenge overview",
-  "/admin/challenges": "Create a challenge",
-  "/system": "All organizations",
+  "/challenges/mine": "My challenge overview",
+  "/challenges/new": "Create a challenge",
+  "/system": "All users",
 };
 const label = (href: string) => LABELS[href] ?? href;
 
@@ -79,7 +79,7 @@ function Sidebar() {
     <aside className="sidebar">
       <a href="/me" className="brand">
         <span className="mark">in</span>
-        <span className="brand-name">{me.orgName ?? "Challenge"}</span>
+        <span className="brand-name">Challenge</span>
       </a>
 
       <nav className="side-nav">
@@ -89,7 +89,8 @@ function Sidebar() {
               <SideLink href="/me" pathname={pathname}>My posts</SideLink>
               <div className="nav-section">Challenges</div>
               <SideLink href="/challenges" pathname={pathname}>All challenges</SideLink>
-              <SideLink href="/admin/challenges" pathname={pathname}>Create a challenge</SideLink>
+              <SideLink href="/challenges/mine" pathname={pathname}>My challenges</SideLink>
+              <SideLink href="/challenges/new" pathname={pathname}>Create a challenge</SideLink>
               {challenges.some((challenge) => challenge.isFavorite) && (
                 <div className="nav-subsection">Favorites</div>
               )}

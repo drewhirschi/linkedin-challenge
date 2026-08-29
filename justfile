@@ -70,4 +70,13 @@ check:
     node --check extension/storage.js
     node --check extension/sync.js
     bash -n extension/build.sh
+    server/scripts/test-auth-e2e.sh
     git diff --check
+
+# Exercise password auth against a real server and isolated temporary database.
+test-auth-e2e:
+    server/scripts/test-auth-e2e.sh
+
+# On a clean, pushed commit: run all checks and post the required GitHub commit status.
+signoff:
+    scripts/local-check-signoff.sh

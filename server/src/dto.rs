@@ -9,7 +9,9 @@ use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
 
-use crate::models::{ChallengeMembership, Competition, Invite, Member, Org, Post, PostComment, PostSnapshot};
+use crate::models::{
+    ChallengeMembership, Competition, Invite, Member, Org, Post, PostComment, PostSnapshot,
+};
 use crate::scoring::{
     ScoringConfig, Standing, WEEK_SECONDS, active_competition, compute_standings,
 };
@@ -226,11 +228,35 @@ pub async fn require_member(db: &mut Db, headers: &http::HeaderMap) -> ApiResult
         .ok_or_else(|| ApiError::unauthorized("sign-in required"))
 }
 
-/// The signed-in member, but only if they administer their org.
-pub async fn require_admin(db: &mut Db, headers: &http::HeaderMap) -> ApiResult<Member> {
-    crate::auth::current_admin(db, headers)
-        .await
-        .ok_or_else(|| ApiError::unauthorized("admin session required"))
+/// Whether this user has management rights for one challenge.
+pub async fn is_challenge_owner(db: &mut Db, member_id: i64, challenge_id: i64) -> ApiResult<bool> {
+    Ok(ChallengeMembership::filter(
+        ChallengeMembership::fields()
+            .challenge_id()
+            .eq(challenge_id),
+    )
+    .exec(&mut *db)
+    .await?
+    .into_iter()
+    .any(|membership| membership.member_id == member_id && membership.role == "owner"))
+}
+
+/// Resolve a challenge only when the signed-in user is one of its owners.
+pub async fn require_challenge_owner(
+    db: &mut Db,
+    headers: &http::HeaderMap,
+    challenge_id: i64,
+) -> ApiResult<(Member, Competition)> {
+    let member = require_member(db, headers).await?;
+    if !is_challenge_owner(db, member.id, challenge_id).await? {
+        return Err(ApiError::not_found("challenge not found"));
+    }
+    let challenge = Competition::filter_by_id(challenge_id)
+        .first()
+        .exec(&mut *db)
+        .await?
+        .ok_or_else(|| ApiError::not_found("challenge not found"))?;
+    Ok((member, challenge))
 }
 
 /// The signed-in member, but only if they operate the product itself.
@@ -293,11 +319,10 @@ fn rank(standings: Vec<Standing>) -> Vec<StandingRow> {
 }
 
 pub async fn member_challenges(db: &mut Db, member_id: i64) -> ApiResult<Vec<Competition>> {
-    let memberships = ChallengeMembership::filter(
-        ChallengeMembership::fields().member_id().eq(member_id),
-    )
-    .exec(&mut *db)
-    .await?;
+    let memberships =
+        ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(member_id))
+            .exec(&mut *db)
+            .await?;
     let mut challenges = Vec::new();
     for membership in memberships {
         if let Some(challenge) = Competition::filter_by_id(membership.challenge_id)
@@ -313,13 +338,12 @@ pub async fn member_challenges(db: &mut Db, member_id: i64) -> ApiResult<Vec<Com
 }
 
 pub async fn member_challenge(db: &mut Db, member_id: i64, id: i64) -> ApiResult<Competition> {
-    let membership = ChallengeMembership::filter(
-        ChallengeMembership::fields().member_id().eq(member_id),
-    )
-    .exec(&mut *db)
-    .await?
-    .into_iter()
-    .any(|membership| membership.challenge_id == id);
+    let membership =
+        ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(member_id))
+            .exec(&mut *db)
+            .await?
+            .into_iter()
+            .any(|membership| membership.challenge_id == id);
     if !membership {
         return Err(ApiError::not_found("challenge not found"));
     }
@@ -333,22 +357,30 @@ pub async fn member_challenge(db: &mut Db, member_id: i64, id: i64) -> ApiResult
 /// The org's challenge list plus the default one to display.
 pub async fn challenge_list(db: &mut Db, member: &Member) -> ApiResult<ChallengeList> {
     let comps = member_challenges(db, member.id).await?;
-    let memberships = ChallengeMembership::filter(
-        ChallengeMembership::fields().member_id().eq(member.id),
-    ).exec(&mut *db).await?;
-    let infos: Vec<CompetitionInfo> = comps.iter().map(|challenge| {
-        let mut info = CompetitionInfo::new(challenge);
-        info.is_owner = challenge.creator_id == member.id;
-        info.is_favorite = memberships.iter().any(|membership| {
-            membership.challenge_id == challenge.id && membership.is_favorite
-        });
-        info
-    }).collect();
+    let memberships =
+        ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(member.id))
+            .exec(&mut *db)
+            .await?;
+    let infos: Vec<CompetitionInfo> = comps
+        .iter()
+        .map(|challenge| {
+            let mut info = CompetitionInfo::new(challenge);
+            info.is_owner = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.role == "owner"
+            });
+            info.is_favorite = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.is_favorite
+            });
+            info
+        })
+        .collect();
     let current = active_competition(comps, now_unix());
     Ok(ChallengeList {
         current: current.as_ref().map(|challenge| {
             let mut info = CompetitionInfo::new(challenge);
-            info.is_owner = challenge.creator_id == member.id;
+            info.is_owner = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.role == "owner"
+            });
             info.is_favorite = memberships.iter().any(|membership| {
                 membership.challenge_id == challenge.id && membership.is_favorite
             });
@@ -366,17 +398,23 @@ pub async fn leaderboard(
     challenge_id: Option<i64>,
 ) -> ApiResult<Leaderboard> {
     let comps = member_challenges(db, member.id).await?;
-    let memberships = ChallengeMembership::filter(
-        ChallengeMembership::fields().member_id().eq(member.id),
-    ).exec(&mut *db).await?;
-    let challenges: Vec<CompetitionInfo> = comps.iter().map(|challenge| {
-        let mut info = CompetitionInfo::new(challenge);
-        info.is_owner = challenge.creator_id == member.id;
-        info.is_favorite = memberships.iter().any(|membership| {
-            membership.challenge_id == challenge.id && membership.is_favorite
-        });
-        info
-    }).collect();
+    let memberships =
+        ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(member.id))
+            .exec(&mut *db)
+            .await?;
+    let challenges: Vec<CompetitionInfo> = comps
+        .iter()
+        .map(|challenge| {
+            let mut info = CompetitionInfo::new(challenge);
+            info.is_owner = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.role == "owner"
+            });
+            info.is_favorite = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.is_favorite
+            });
+            info
+        })
+        .collect();
 
     let comp = match challenge_id {
         Some(id) => Some(member_challenge(db, member.id, id).await?),
@@ -391,7 +429,9 @@ pub async fn leaderboard(
     Ok(Leaderboard {
         competition: comp.as_ref().map(|challenge| {
             let mut info = CompetitionInfo::new(challenge);
-            info.is_owner = challenge.creator_id == member.id;
+            info.is_owner = memberships.iter().any(|membership| {
+                membership.challenge_id == challenge.id && membership.role == "owner"
+            });
             info.is_favorite = memberships.iter().any(|membership| {
                 membership.challenge_id == challenge.id && membership.is_favorite
             });
@@ -409,11 +449,13 @@ pub async fn competition_aggregate(
     admin: &Member,
     challenge_id: i64,
 ) -> ApiResult<Aggregate> {
+    if !is_challenge_owner(db, admin.id, challenge_id).await? {
+        return Err(ApiError::not_found("challenge not found"));
+    }
     let comp = Competition::filter_by_id(challenge_id)
         .first()
         .exec(&mut *db)
         .await?
-        .filter(|challenge| challenge.creator_id == admin.id)
         .ok_or_else(|| ApiError::not_found("challenge not found"))?;
     let standings = rank(compute_standings(db, &comp).await?);
     aggregate_for(db, &comp, &standings).await
@@ -425,11 +467,10 @@ pub async fn aggregate_for(
     comp: &Competition,
     standings: &[StandingRow],
 ) -> ApiResult<Aggregate> {
-    let memberships = ChallengeMembership::filter(
-        ChallengeMembership::fields().challenge_id().eq(comp.id),
-    )
-        .exec(&mut *db)
-        .await?;
+    let memberships =
+        ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
+            .exec(&mut *db)
+            .await?;
 
     let mut totals = (0i64, 0i64, 0i64, 0i64);
     let mut total_posts = 0usize;
@@ -438,7 +479,9 @@ pub async fn aggregate_for(
             .first()
             .exec(&mut *db)
             .await?
-        else { continue; };
+        else {
+            continue;
+        };
         let posts = Post::filter(Post::fields().member_id().eq(member.id))
             .exec(&mut *db)
             .await?;
@@ -507,7 +550,9 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
             permalink: post.permalink.clone(),
             posted_at,
             text_preview: post.text_preview.clone(),
-            image_urls: post.image_urls_json.as_deref()
+            image_urls: post
+                .image_urls_json
+                .as_deref()
                 .and_then(|value| serde_json::from_str(value).ok())
                 .unwrap_or_default(),
             is_repost: post.is_repost,
@@ -591,7 +636,10 @@ pub async fn member_detail(
         }
     }
 
-    let needle = post_filter.map(str::trim).filter(|value| !value.is_empty()).map(str::to_lowercase);
+    let needle = post_filter
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_lowercase);
     if let Some(needle) = needle {
         all_posts.retain(|post| {
             post.text_preview
@@ -618,7 +666,11 @@ pub async fn member_detail(
     let post_page_count = post_count.div_ceil(post_page_size).max(1);
     let post_page = post_page.clamp(1, post_page_count);
     let start = (post_page - 1) * post_page_size;
-    let posts_page = all_posts.into_iter().skip(start).take(post_page_size).collect();
+    let posts_page = all_posts
+        .into_iter()
+        .skip(start)
+        .take(post_page_size)
+        .collect();
 
     outside.sort_by(|a, b| b.posted_at.cmp(&a.posted_at));
 
@@ -699,9 +751,18 @@ pub async fn user_posts(
     for post in &stored {
         posts.push(post_stats(db, post).await?.0);
     }
-    let needle = post_filter.map(str::trim).filter(|value| !value.is_empty()).map(str::to_lowercase);
+    let needle = post_filter
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_lowercase);
     if let Some(needle) = needle {
-        posts.retain(|post| post.text_preview.as_deref().unwrap_or_default().to_lowercase().contains(&needle));
+        posts.retain(|post| {
+            post.text_preview
+                .as_deref()
+                .unwrap_or_default()
+                .to_lowercase()
+                .contains(&needle)
+        });
     }
     posts.sort_by(|a, b| {
         let order = match post_sort {
@@ -729,9 +790,22 @@ pub async fn user_posts(
 }
 
 pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverview> {
-    let mut comps = Competition::filter(Competition::fields().creator_id().eq(admin.id))
-        .exec(&mut *db)
-        .await?;
+    let owner_memberships =
+        ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(admin.id))
+            .exec(&mut *db)
+            .await?
+            .into_iter()
+            .filter(|membership| membership.role == "owner");
+    let mut comps = Vec::new();
+    for membership in owner_memberships {
+        if let Some(challenge) = Competition::filter_by_id(membership.challenge_id)
+            .first()
+            .exec(&mut *db)
+            .await?
+        {
+            comps.push(challenge);
+        }
+    }
     comps.sort_by(|a, b| b.start_at.cmp(&a.start_at));
     let competitions: Vec<CompetitionInfo> = comps.iter().map(CompetitionInfo::new).collect();
 
@@ -742,21 +816,34 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
     };
 
     let mut invites = match &current {
-        Some(challenge) => Invite::filter(Invite::fields().challenge_id().eq(challenge.id))
-            .exec(&mut *db).await?,
+        Some(challenge) => {
+            Invite::filter(Invite::fields().challenge_id().eq(challenge.id))
+                .exec(&mut *db)
+                .await?
+        }
         None => Vec::new(),
     };
     invites.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
     let memberships = match &current {
-        Some(challenge) => ChallengeMembership::filter(
-            ChallengeMembership::fields().challenge_id().eq(challenge.id),
-        ).exec(&mut *db).await?,
+        Some(challenge) => {
+            ChallengeMembership::filter(
+                ChallengeMembership::fields()
+                    .challenge_id()
+                    .eq(challenge.id),
+            )
+            .exec(&mut *db)
+            .await?
+        }
         None => Vec::new(),
     };
     let mut members = Vec::new();
     for membership in &memberships {
-        if let Some(member) = Member::filter_by_id(membership.member_id).first().exec(&mut *db).await? {
+        if let Some(member) = Member::filter_by_id(membership.member_id)
+            .first()
+            .exec(&mut *db)
+            .await?
+        {
             members.push(member);
         }
     }
@@ -829,76 +916,48 @@ pub struct SystemMemberRow {
     pub id: i64,
     pub display_name: String,
     pub email: Option<String>,
-    pub is_admin: bool,
+    pub owns_challenge: bool,
     pub is_system_admin: bool,
     /// Unix seconds of the newest profile snapshot — a proxy for "is the extension syncing".
     pub last_synced_at: Option<i64>,
     pub created_at: i64,
 }
 
-/// One org and everyone in it.
-#[derive(Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct SystemOrgRow {
-    pub id: i64,
-    pub slug: String,
-    pub name: String,
-    pub created_at: i64,
-    pub active_challenge: Option<String>,
-    pub members: Vec<SystemMemberRow>,
-}
-
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemOverview {
-    pub orgs: Vec<SystemOrgRow>,
+    pub members: Vec<SystemMemberRow>,
 }
 
-/// Everything the system panel shows: every org, every member.
-///
-/// A full walk of two small tables. This backs a hand-operated support panel, not a hot path;
-/// revisit if orgs stop fitting on one screen.
+/// Every account, for the hand-operated product support panel.
 pub async fn system_overview(db: &mut Db) -> ApiResult<SystemOverview> {
-    let mut orgs = Org::all().exec(&mut *db).await?;
-    orgs.sort_by(|a, b| a.name.cmp(&b.name));
-
-    let mut rows = Vec::new();
-    for org in &orgs {
-        let active = active_competition(org_challenges(db, org.id).await?, now_unix());
-
-        let mut members = Member::filter(Member::fields().org_id().eq(org.id))
-            .exec(&mut *db)
-            .await?;
-        members.sort_by(|a, b| a.display_name.cmp(&b.display_name));
-
-        let mut member_rows = Vec::new();
-        for m in members {
-            let mut snaps = crate::models::ProfileSnapshot::filter(
-                crate::models::ProfileSnapshot::fields().member_id().eq(m.id),
-            )
-            .exec(&mut *db)
-            .await?;
-            snaps.sort_by_key(|s| s.captured_at);
-            member_rows.push(SystemMemberRow {
-                id: m.id,
-                display_name: m.display_name,
-                email: m.email,
-                is_admin: m.is_admin,
-                is_system_admin: m.is_system_admin,
-                last_synced_at: snaps.last().map(|s| s.captured_at),
-                created_at: m.created_at,
-            });
-        }
-
-        rows.push(SystemOrgRow {
-            id: org.id,
-            slug: org.slug.clone(),
-            name: org.name.clone(),
-            created_at: org.created_at,
-            active_challenge: active.map(|c| c.name),
-            members: member_rows,
+    let mut users = Member::all().exec(&mut *db).await?;
+    users.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+    let mut members = Vec::new();
+    for user in users {
+        let owns_challenge =
+            ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(user.id))
+                .exec(&mut *db)
+                .await?
+                .into_iter()
+                .any(|membership| membership.role == "owner");
+        let mut snapshots = crate::models::ProfileSnapshot::filter(
+            crate::models::ProfileSnapshot::fields()
+                .member_id()
+                .eq(user.id),
+        )
+        .exec(&mut *db)
+        .await?;
+        snapshots.sort_by_key(|snapshot| snapshot.captured_at);
+        members.push(SystemMemberRow {
+            id: user.id,
+            display_name: user.display_name,
+            email: user.email,
+            owns_challenge,
+            is_system_admin: user.is_system_admin,
+            last_synced_at: snapshots.last().map(|snapshot| snapshot.captured_at),
+            created_at: user.created_at,
         });
     }
-
-    Ok(SystemOverview { orgs: rows })
+    Ok(SystemOverview { members })
 }

@@ -1,7 +1,7 @@
 //! Auth as plain functions over a `Db` handle and the request headers.
 //!
-//! **Everyone signs in.** Participants and admins are both `Member` rows with an email and an
-//! Argon2 password hash; `is_admin` is a role on top, not a separate kind of account. A session is
+//! **Everyone signs in.** Users are `Member` rows with an email and an Argon2 password hash;
+//! challenge roles live on memberships and product operators use `is_system_admin`. A session is
 //! a random token whose SHA-256 we store, handed back as an `HttpOnly` cookie.
 //!
 //! The extension is the one exception: it authenticates with a bearer sync token instead of the
@@ -152,7 +152,12 @@ pub async fn session_from_token(db: &mut Db, token: &str) -> Option<SessionInfo>
         .flatten()?;
     let impersonator = match sess.impersonator_id {
         Some(id) => {
-            let real = Member::filter_by_id(id).first().exec(&mut *db).await.ok().flatten();
+            let real = Member::filter_by_id(id)
+                .first()
+                .exec(&mut *db)
+                .await
+                .ok()
+                .flatten();
             // The impersonator must still BE a system admin: were the flag revoked mid-session,
             // the borrowed session dies with it rather than outliving the privilege.
             match real {
@@ -174,16 +179,11 @@ pub async fn current_session(db: &mut Db, headers: &HeaderMap) -> Option<Session
     session_from_token(db, &token).await
 }
 
-/// The signed-in member for this request, or None. Everyone signs in — participants included —
-/// so this is the general case and `current_admin` is the narrowing.
+/// The signed-in member for this request, or None. Challenge permissions are checked separately
+/// against that member's challenge membership.
 pub async fn current_member(db: &mut Db, headers: &HeaderMap) -> Option<Member> {
     let token = cookie(headers, SESSION_COOKIE)?;
     member_from_session_token(db, &token).await
-}
-
-/// The signed-in member, but only if they administer their org.
-pub async fn current_admin(db: &mut Db, headers: &HeaderMap) -> Option<Member> {
-    current_member(db, headers).await.filter(|m| m.is_admin)
 }
 
 /// The signed-in member, but only if they operate the product itself.
@@ -265,7 +265,10 @@ mod tests {
 
     #[test]
     fn account_fields_are_bounded_and_validated() {
-        assert_eq!(account_validation_error("Ada", "ada@example.com", "password1"), None);
+        assert_eq!(
+            account_validation_error("Ada", "ada@example.com", "password1"),
+            None
+        );
         assert!(account_validation_error("", "ada@example.com", "password1").is_some());
         assert!(account_validation_error("Ada", "not-an-email", "password1").is_some());
         assert!(account_validation_error("Ada", "ada@example.com", "short").is_some());

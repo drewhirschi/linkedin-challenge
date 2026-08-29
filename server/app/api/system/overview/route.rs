@@ -1,4 +1,4 @@
-//! `GET /api/system/overview` — every org and member, for the product operator's panel.
+//! `GET /api/system/overview` — every user, for the product operator's panel.
 
 use axum::{Extension, Json};
 use http::HeaderMap;

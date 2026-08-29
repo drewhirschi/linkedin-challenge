@@ -139,6 +139,11 @@ pub async fn connect() -> Db {
         "ALTER TABLE challenge_memberships ADD COLUMN is_favorite BOOLEAN NOT NULL DEFAULT FALSE",
     )
     .await;
+    add_column(
+        &mut db,
+        "ALTER TABLE challenge_memberships ADD COLUMN role TEXT NOT NULL DEFAULT 'participant'",
+    )
+    .await;
     // Only rows predating challenge ownership have creator_id = 0. Backfill their former org
     // participants once; future challenges use explicit memberships and are never touched here.
     execute_migration(
@@ -149,6 +154,16 @@ pub async fn connect() -> Db {
     execute_migration(
         &mut db,
         "UPDATE competitions SET creator_id = COALESCE((SELECT MIN(id) FROM members WHERE members.org_id = competitions.org_id AND members.is_admin = TRUE), 0) WHERE creator_id = 0",
+    )
+    .await;
+    execute_migration(
+        &mut db,
+        "UPDATE challenge_memberships SET role = 'owner' WHERE member_id = (SELECT creator_id FROM competitions WHERE competitions.id = challenge_memberships.challenge_id)",
+    )
+    .await;
+    execute_migration(
+        &mut db,
+        "UPDATE invites SET role = 'owner' WHERE role = 'admin'",
     )
     .await;
 
@@ -190,7 +205,8 @@ pub struct Org {
     pub competitions: toasty::Deferred<Vec<Competition>>,
 }
 
-/// A person in an org. Participants sync via the extension; admins manage the challenge.
+/// A product user. Challenge permissions live on `ChallengeMembership`; the org foreign key is
+/// retained temporarily for compatibility with existing databases and is not an auth boundary.
 #[derive(Debug, toasty::Model)]
 pub struct Member {
     #[key]
@@ -208,6 +224,7 @@ pub struct Member {
     pub public_identifier: String,
     pub profile_url: Option<String>,
 
+    /// Legacy organization role. Do not use for authorization; challenge roles are memberships.
     pub is_admin: bool,
     /// Operator of the product itself, across every org — unlocks the system panel and
     /// impersonation. Granted by seed or by hand, never through any API.
@@ -306,6 +323,8 @@ pub struct ChallengeMembership {
     pub challenge_id: i64,
     #[index]
     pub member_id: i64,
+    /// `owner` may manage this challenge and its invites; `participant` may view and compete.
+    pub role: String,
     pub is_favorite: bool,
     pub joined_at: i64,
 }

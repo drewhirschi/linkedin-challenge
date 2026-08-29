@@ -38,7 +38,7 @@ export default function AdminOverviewPage() {
         ) : (
           <>
             No challenge running. {" "}
-            <a href="/admin/challenges">Set one up.</a>
+            <a href="/challenges/new">Set one up.</a>
           </>
         )}
       </p>

@@ -29,13 +29,24 @@ pub async fn post(
     Competition::filter_by_id(invite.challenge_id).first().exec(&mut db).await?
         .ok_or_else(|| ApiError::not_found("challenge not found"))?;
 
-    let joined = ChallengeMembership::filter(
+    let membership_role = if invite.role == "owner" || invite.role == "admin" {
+        "owner"
+    } else {
+        "participant"
+    };
+    let existing = ChallengeMembership::filter(
         ChallengeMembership::fields().challenge_id().eq(invite.challenge_id),
-    ).exec(&mut db).await?.into_iter().any(|membership| membership.member_id == member.id);
-    if !joined {
+    ).exec(&mut db).await?.into_iter().find(|membership| membership.member_id == member.id);
+    if let Some(membership) = existing {
+        if membership_role == "owner" && membership.role != "owner" {
+            toasty::update!(ChallengeMembership::filter_by_id(membership.id) { role: "owner" })
+                .exec(&mut db).await?;
+        }
+    } else {
         toasty::create!(ChallengeMembership {
             challenge_id: invite.challenge_id,
             member_id: member.id,
+            role: membership_role,
             is_favorite: false,
             joined_at: now_unix(),
         }).exec(&mut db).await?;

@@ -34,7 +34,7 @@ pub struct JoinResponse {
     pub member_id: i64,
     /// Shown once, on the confirmation screen — paste it into the extension to start syncing.
     pub sync_token: String,
-    pub is_admin: bool,
+    pub is_owner: bool,
 }
 
 #[nextrs::api(
@@ -108,17 +108,28 @@ pub async fn post(
         }
     };
 
-    let already_joined = ChallengeMembership::filter(
+    let membership_role = if invite.role == "owner" || invite.role == "admin" {
+        "owner"
+    } else {
+        "participant"
+    };
+    let existing_membership = ChallengeMembership::filter(
         ChallengeMembership::fields().challenge_id().eq(challenge.id),
     )
     .exec(&mut db)
     .await?
     .into_iter()
-    .any(|membership| membership.member_id == member.id);
-    if !already_joined {
+    .find(|membership| membership.member_id == member.id);
+    if let Some(membership) = existing_membership {
+        if membership_role == "owner" && membership.role != "owner" {
+            toasty::update!(ChallengeMembership::filter_by_id(membership.id) { role: "owner" })
+                .exec(&mut db).await?;
+        }
+    } else {
         toasty::create!(ChallengeMembership {
             challenge_id: challenge.id,
             member_id: member.id,
+            role: membership_role,
             is_favorite: false,
             joined_at: now_unix(),
         })
@@ -147,7 +158,7 @@ pub async fn post(
             org_name: challenge.name,
             member_id: member.id,
             sync_token: secret,
-            is_admin: challenge.creator_id == member.id,
+            is_owner: membership_role == "owner",
         }),
     ))
 }

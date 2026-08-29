@@ -1,4 +1,4 @@
-// The product operator's panel: every org, every member, and impersonation — the support tool for
+// The product operator's panel: every user and impersonation — the support tool for
 // "what is this user actually seeing?". Reachable only with the system-admin flag.
 import { useGetSystemOverview, useImpersonate } from "@linkedin-challenge/client/react-query";
 import { fmtDate, initials } from "../../components/format";
@@ -16,35 +16,20 @@ export default function SystemPanel() {
     );
   }
 
-  const { orgs } = data.data;
+  const { members } = data.data;
 
   return (
     <>
-      <h1>All organizations</h1>
+      <h1>All users</h1>
       <p className="lede">
-        Every company on the platform. &ldquo;View as&rdquo; swaps your session for theirs — you
+        Every account on the platform. &ldquo;View as&rdquo; swaps your session for theirs — you
         see exactly what they see, with a banner in the sidebar until you stop.
       </p>
-
-      {orgs.map((org) => (
-        <section key={org.id}>
-          <div className="week-head">
-            <h2 style={{ margin: 0 }}>{org.name}</h2>
-            <span className="small muted">
-              /{org.slug} · created {fmtDate(org.createdAt)}
-              {org.activeChallenge && (
-                <>
-                  {" · "}
-                  <span className="badge ok">{org.activeChallenge}</span>
-                </>
-              )}
-            </span>
-          </div>
-          <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <table>
               <thead>
                 <tr>
-                  <th>Member</th>
+                  <th>User</th>
                   <th>Email</th>
                   <th>Role</th>
                   <th>Last sync</th>
@@ -52,7 +37,7 @@ export default function SystemPanel() {
                 </tr>
               </thead>
               <tbody>
-                {org.members.map((m) => (
+                {members.map((m) => (
                   <tr key={m.id}>
                     <td>
                       <span className="who">
@@ -64,10 +49,10 @@ export default function SystemPanel() {
                     <td className="small">
                       {m.isSystemAdmin ? (
                         <span className="badge">system</span>
-                      ) : m.isAdmin ? (
-                        <span className="badge ok">admin</span>
+                      ) : m.ownsChallenge ? (
+                        <span className="badge ok">challenge owner</span>
                       ) : (
-                        <span className="muted">participant</span>
+                        <span className="muted">user</span>
                       )}
                     </td>
                     <td className="small muted">
@@ -100,9 +85,7 @@ export default function SystemPanel() {
                 ))}
               </tbody>
             </table>
-          </div>
-        </section>
-      ))}
+      </div>
     </>
   );
 }

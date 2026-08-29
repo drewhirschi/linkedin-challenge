@@ -4,7 +4,9 @@
 use toasty::Db;
 
 use crate::auth::{hash_password, member_by_email};
-use crate::models::{ChallengeMembership, Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot};
+use crate::models::{
+    ChallengeMembership, Competition, Member, Org, Post, PostSnapshot, ProfileSnapshot,
+};
 use crate::scoring::ScoringConfig;
 use crate::util::{new_bearer_token, now_unix, parse_date};
 
@@ -25,11 +27,15 @@ pub async fn seed_local_account(db: &mut Db) -> toasty::Result<()> {
         None => {
             let org = match Org::filter_by_slug("local").first().exec(&mut *db).await? {
                 Some(org) => org,
-                None => toasty::create!(Org {
-                    slug: "local",
-                    name: "Local Development",
-                    created_at: now,
-                }).exec(&mut *db).await?,
+                None => {
+                    toasty::create!(Org {
+                        slug: "local",
+                        name: "Local Development",
+                        created_at: now,
+                    })
+                    .exec(&mut *db)
+                    .await?
+                }
             };
             let (_unused, token_hash) = new_bearer_token();
             toasty::create!(Member {
@@ -44,7 +50,9 @@ pub async fn seed_local_account(db: &mut Db) -> toasty::Result<()> {
                 password_hash: Some(hash_password(LOCAL_PASSWORD)),
                 api_token_hash: token_hash,
                 created_at: now,
-            }).exec(&mut *db).await?
+            })
+            .exec(&mut *db)
+            .await?
         }
     };
 
@@ -56,7 +64,10 @@ pub async fn seed_local_account(db: &mut Db) -> toasty::Result<()> {
 async fn ensure_local_challenge(db: &mut Db, member: &Member) -> toasty::Result<()> {
     let start = parse_date("2026-07-01").expect("valid local challenge start");
     let end = parse_date("2026-09-30").expect("valid local challenge end") + 86_399;
-    let existing = Competition::all().exec(&mut *db).await?.into_iter()
+    let existing = Competition::all()
+        .exec(&mut *db)
+        .await?
+        .into_iter()
         .find(|challenge| challenge.creator_id == member.id && challenge.name == "Q3 World Cup");
     let challenge = match existing {
         Some(challenge) => {
@@ -75,48 +86,61 @@ async fn ensure_local_challenge(db: &mut Db, member: &Member) -> toasty::Result<
                 normalize_by_followers: true,
                 follower_baseline: 1000,
                 is_active: true,
-            }).exec(&mut *db).await?;
+            })
+            .exec(&mut *db)
+            .await?;
             challenge
         }
-        None => toasty::create!(Competition {
-            org_id: member.org_id,
-            creator_id: member.id,
-            name: "Q3 World Cup",
-            start_at: start,
-            end_at: end,
-            max_posts_per_week: 3,
-            per_reaction: 1.0,
-            per_comment: 5.0,
-            per_repost: 5.0,
-            per_send: 5.0,
-            per_save: 3.0,
-            per_impression: 0.01,
-            per_follower_gained: 10.0,
-            per_profile_view: 0.5,
-            normalize_by_followers: true,
-            follower_baseline: 1000,
-            is_active: true,
-            created_at: now_unix(),
-        }).exec(&mut *db).await?,
+        None => {
+            toasty::create!(Competition {
+                org_id: member.org_id,
+                creator_id: member.id,
+                name: "Q3 World Cup",
+                start_at: start,
+                end_at: end,
+                max_posts_per_week: 3,
+                per_reaction: 1.0,
+                per_comment: 5.0,
+                per_repost: 5.0,
+                per_send: 5.0,
+                per_save: 3.0,
+                per_impression: 0.01,
+                per_follower_gained: 10.0,
+                per_profile_view: 0.5,
+                normalize_by_followers: true,
+                follower_baseline: 1000,
+                is_active: true,
+                created_at: now_unix(),
+            })
+            .exec(&mut *db)
+            .await?
+        }
     };
 
-    let membership = ChallengeMembership::filter(
-        ChallengeMembership::fields().member_id().eq(member.id),
-    ).exec(&mut *db).await?.into_iter()
-        .find(|membership| membership.challenge_id == challenge.id);
+    let membership =
+        ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(member.id))
+            .exec(&mut *db)
+            .await?
+            .into_iter()
+            .find(|membership| membership.challenge_id == challenge.id);
     match membership {
         Some(membership) => {
             toasty::update!(ChallengeMembership::filter_by_id(membership.id) {
                 is_favorite: true,
-            }).exec(&mut *db).await?;
+            })
+            .exec(&mut *db)
+            .await?;
         }
         None => {
             toasty::create!(ChallengeMembership {
                 challenge_id: challenge.id,
                 member_id: member.id,
+                role: "owner",
                 is_favorite: true,
                 joined_at: now_unix(),
-            }).exec(&mut *db).await?;
+            })
+            .exec(&mut *db)
+            .await?;
         }
     }
     Ok(())
@@ -153,7 +177,11 @@ const PEOPLE: &[Person] = &[
         980,
         140,
         260,
-        &[(3, 190, 26, 9, 5400), (11, 240, 33, 15, 7100), (20, 160, 20, 8, 4300)],
+        &[
+            (3, 190, 26, 9, 5400),
+            (11, 240, 33, 15, 7100),
+            (20, 160, 20, 8, 4300),
+        ],
     ),
     (
         "Carmen Diaz",
@@ -169,7 +197,11 @@ const PEOPLE: &[Person] = &[
         2760,
         410,
         560,
-        &[(4, 150, 18, 6, 9100), (10, 300, 40, 19, 15400), (19, 220, 28, 11, 10200)],
+        &[
+            (4, 150, 18, 6, 9100),
+            (10, 300, 40, 19, 15400),
+            (19, 220, 28, 11, 10200),
+        ],
     ),
     (
         "Erin Wong",
@@ -177,7 +209,11 @@ const PEOPLE: &[Person] = &[
         520,
         60,
         190,
-        &[(5, 110, 22, 14, 3800), (13, 180, 35, 20, 5200), (21, 260, 51, 33, 7400)],
+        &[
+            (5, 110, 22, 14, 3800),
+            (13, 180, 35, 20, 5200),
+            (21, 260, 51, 33, 7400),
+        ],
     ),
 ];
 
@@ -246,13 +282,17 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
     .exec(&mut *db)
     .await?;
     toasty::update!(Competition::filter_by_id(competition.id) { creator_id: admin.id })
-        .exec(&mut *db).await?;
+        .exec(&mut *db)
+        .await?;
     toasty::create!(ChallengeMembership {
         challenge_id: competition.id,
         member_id: admin.id,
+        role: "owner",
         is_favorite: true,
         joined_at: now,
-    }).exec(&mut *db).await?;
+    })
+    .exec(&mut *db)
+    .await?;
 
     // A product operator for the system panel: sysadmin@demo.test / demopassword. Belongs to the
     // demo org (every member belongs somewhere) but the flag is what matters.
@@ -288,7 +328,10 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
             is_system_admin: false,
             // Everyone signs in, so seeded participants need real credentials or the demo is
             // unusable: <first-name>@demo.test / demopassword.
-            email: Some(format!("{}@demo.test", slug.split('-').next().unwrap_or(&slug))),
+            email: Some(format!(
+                "{}@demo.test",
+                slug.split('-').next().unwrap_or(&slug)
+            )),
             password_hash: Some(hash_password(DEMO_PASSWORD)),
             api_token_hash: token_hash,
             created_at: now,
@@ -298,9 +341,12 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
         toasty::create!(ChallengeMembership {
             challenge_id: competition.id,
             member_id: member.id,
+            role: "participant",
             is_favorite: false,
             joined_at: now,
-        }).exec(&mut *db).await?;
+        })
+        .exec(&mut *db)
+        .await?;
 
         // Two profile snapshots so there's an in-window follower/view delta.
         toasty::create!(ProfileSnapshot {
@@ -325,7 +371,9 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
             let post = toasty::create!(Post {
                 member_id: member.id,
                 urn: format!("urn:li:activity:demo{idx}-{i}"),
-                permalink: format!("https://www.linkedin.com/feed/update/urn:li:activity:demo{idx}-{i}/"),
+                permalink: format!(
+                    "https://www.linkedin.com/feed/update/urn:li:activity:demo{idx}-{i}/"
+                ),
                 created_at: created,
                 text_preview: Some(format!("{name}'s post #{}", i + 1)),
                 image_urls_json: None,

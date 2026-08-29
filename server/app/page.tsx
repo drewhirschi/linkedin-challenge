@@ -70,14 +70,8 @@ export function ChallengeLeaderboard({ fixedChallengeId }: { fixedChallengeId?: 
         <h1>Leaderboard</h1>
         <div className="empty">
           No challenge yet.
-          {me?.isAdmin ? (
-            <>
-              {" "}
-              <a href="/admin/challenges">Set one up</a> to start scoring.
-            </>
-          ) : (
-            " Your admin hasn't set one up yet."
-          )}
+          {" "}
+          <a href="/challenges/new">Set one up</a> to start scoring.
         </div>
       </>
     );

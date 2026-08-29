@@ -1,5 +1,5 @@
-//! `GET /api/auth/me` — who, if anyone, is signed in. The sidebar shell reads this for the org
-//! name, the nav sections to show, and the impersonation banner.
+//! `GET /api/auth/me` — who, if anyone, is signed in. The sidebar shell reads this for navigation
+//! and the impersonation banner.
 
 use axum::{Extension, Json};
 use http::HeaderMap;
@@ -14,10 +14,6 @@ use utoipa::ToSchema;
 pub struct MeResponse {
     pub signed_in: bool,
     pub display_name: Option<String>,
-    pub org_slug: Option<String>,
-    pub org_name: Option<String>,
-    /// Whether this member administers their org — unlocks the Admin section.
-    pub is_admin: bool,
     /// Whether this member operates the product — unlocks the System panel.
     pub is_system_admin: bool,
     pub member_id: Option<i64>,
@@ -29,9 +25,6 @@ fn signed_out() -> MeResponse {
     MeResponse {
         signed_in: false,
         display_name: None,
-        org_slug: None,
-        org_name: None,
-        is_admin: false,
         is_system_admin: false,
         member_id: None,
         impersonated_by: None,
@@ -51,10 +44,6 @@ pub async fn get(
     Ok(Json(MeResponse {
         signed_in: true,
         display_name: Some(member.display_name),
-        org_slug: None,
-        org_name: None,
-        // Every user may create and manage their own challenges.
-        is_admin: true,
         is_system_admin: member.is_system_admin,
         member_id: Some(member.id),
         impersonated_by: session.impersonator.map(|m| m.display_name),

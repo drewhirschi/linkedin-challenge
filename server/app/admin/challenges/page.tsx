@@ -247,7 +247,7 @@ export default function ChallengeSetup() {
       </div>
       <p className="lede">
         A challenge defines the window being measured and how results turn into a ranking.
-        Everyone in the company takes part automatically.
+        You become its first owner. Other people join only when they accept an invitation.
       </p>
 
       {competitions.length === 0 ? (

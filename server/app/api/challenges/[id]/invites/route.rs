@@ -3,8 +3,8 @@
 use axum::extract::Path;
 use axum::{Extension, Json};
 use http::HeaderMap;
-use linkedin_challenge_server::dto::{InviteRow, require_member};
-use linkedin_challenge_server::models::{Competition, Invite};
+use linkedin_challenge_server::dto::{InviteRow, require_challenge_owner};
+use linkedin_challenge_server::models::Invite;
 use linkedin_challenge_server::util::{invite_code, now_unix};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,11 @@ use utoipa::ToSchema;
 
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateInvitesRequest { pub emails: Vec<String> }
+pub struct CreateInvitesRequest {
+    pub emails: Vec<String>,
+    /// `participant` joins the challenge; `owner` may also manage it and invite others.
+    pub role: String,
+}
 
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -29,10 +33,7 @@ pub async fn get(
     headers: HeaderMap,
     Path(id): Path<i64>,
 ) -> Result<Json<ChallengeInvitesResponse>, ApiError> {
-    let creator = require_member(&mut db, &headers).await?;
-    Competition::filter_by_id(id).first().exec(&mut db).await?
-        .filter(|challenge| challenge.creator_id == creator.id)
-        .ok_or_else(|| ApiError::not_found("challenge not found"))?;
+    require_challenge_owner(&mut db, &headers, id).await?;
     let mut invites = Invite::filter(Invite::fields().challenge_id().eq(id))
         .exec(&mut db).await?;
     invites.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -54,10 +55,11 @@ pub async fn post(
     Path(id): Path<i64>,
     Json(req): Json<CreateInvitesRequest>,
 ) -> Result<Json<CreateInvitesResponse>, ApiError> {
-    let creator = require_member(&mut db, &headers).await?;
-    let challenge = Competition::filter_by_id(id).first().exec(&mut db).await?
-        .filter(|challenge| challenge.creator_id == creator.id)
-        .ok_or_else(|| ApiError::not_found("challenge not found"))?;
+    let (creator, challenge) = require_challenge_owner(&mut db, &headers, id).await?;
+    let role = req.role.trim().to_lowercase();
+    if role != "participant" && role != "owner" {
+        return Err(ApiError::bad_request("role must be participant or owner"));
+    }
     let mut emails: Vec<String> = req.emails.into_iter()
         .map(|email| email.trim().to_lowercase())
         .filter(|email| !email.is_empty())
@@ -87,7 +89,7 @@ pub async fn post(
             org_id: creator.org_id,
             code: &code,
             email: Some(email),
-            role: "participant",
+            role: &role,
             redeemed: false,
             created_at: now_unix(),
         }).exec(&mut db).await?;

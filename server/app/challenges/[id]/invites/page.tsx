@@ -39,6 +39,7 @@ function csvEmails(csv: string) {
 export default function ChallengeInvitesPage({ params }: { params: { id: string } }) {
   const challengeId = Number(params.id);
   const [recipients, setRecipients] = useState("");
+  const [role, setRole] = useState<"participant" | "owner">("participant");
   const [error, setError] = useState<string | null>(null);
   const challenge = useGetLeaderboard({ challengeId });
   const { data, isLoading, refetch } = useGetChallengeInvites(challengeId);
@@ -76,7 +77,7 @@ export default function ChallengeInvitesPage({ params }: { params: { id: string 
             setError("Enter at least one email address.");
             return;
           }
-          create.mutate({ id: challengeId, data: { emails } }, {
+          create.mutate({ id: challengeId, data: { emails, role } }, {
             onSuccess: (response) => {
               if (response.status !== 200) {
                 setError(response.data?.error ?? "Could not create invitations.");
@@ -93,6 +94,13 @@ export default function ChallengeInvitesPage({ params }: { params: { id: string 
             <textarea rows={7} value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder={"alex@example.com, sam@example.com\ntaylor@example.com"} />
             <span className="small muted">Separate addresses with commas, spaces, semicolons, or new lines.</span>
           </label>
+          <label className="field">
+            <span>Role</span>
+            <select value={role} onChange={(event) => setRole(event.target.value as "participant" | "owner")}>
+              <option value="participant">Participant</option>
+              <option value="owner">Owner — can manage this challenge and invite others</option>
+            </select>
+          </label>
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button type="submit" disabled={create.isPending || emails.length === 0}>
               {create.isPending ? "Creating invitations…" : `Invite ${emails.length || "people"}`}
@@ -107,9 +115,10 @@ export default function ChallengeInvitesPage({ params }: { params: { id: string 
       </div>
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         {data.data.invites.length === 0 ? <div className="empty">No invitations yet.</div> : (
-          <table><thead><tr><th>Email</th><th>Code</th><th>Status</th></tr></thead><tbody>
+          <table><thead><tr><th>Email</th><th>Role</th><th>Code</th><th>Status</th></tr></thead><tbody>
             {data.data.invites.map((invite) => <tr key={invite.code}>
               <td>{invite.email ?? <span className="muted">Legacy open invite</span>}</td>
+              <td><span className="badge">{invite.role === "owner" || invite.role === "admin" ? "Owner" : "Participant"}</span></td>
               <td><span className="code">{invite.code}</span></td>
               <td><span className={`badge ${invite.redeemed ? "muted" : "ok"}`}>{invite.redeemed ? "Joined" : "Ready to share"}</span></td>
             </tr>)}

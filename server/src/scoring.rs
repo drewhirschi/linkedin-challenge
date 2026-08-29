@@ -9,7 +9,9 @@
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 
-use crate::models::{ChallengeMembership, Competition, Member, Post, PostComment, PostSnapshot, ProfileSnapshot};
+use crate::models::{
+    ChallengeMembership, Competition, Member, Post, PostComment, PostSnapshot, ProfileSnapshot,
+};
 
 pub const WEEK_SECONDS: i64 = 7 * 86400;
 
@@ -127,11 +129,10 @@ pub struct Standing {
 /// challenge to read and score their post data.
 pub async fn compute_standings(db: &mut Db, comp: &Competition) -> toasty::Result<Vec<Standing>> {
     let cfg = ScoringConfig::from_competition(comp);
-    let memberships = ChallengeMembership::filter(
-        ChallengeMembership::fields().challenge_id().eq(comp.id),
-    )
-        .exec(&mut *db)
-        .await?;
+    let memberships =
+        ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
+            .exec(&mut *db)
+            .await?;
 
     let mut standings = Vec::new();
     for membership in memberships {
@@ -147,7 +148,11 @@ pub async fn compute_standings(db: &mut Db, comp: &Competition) -> toasty::Resul
         }
     }
 
-    standings.sort_by(|a, b| b.total.partial_cmp(&a.total).unwrap_or(std::cmp::Ordering::Equal));
+    standings.sort_by(|a, b| {
+        b.total
+            .partial_cmp(&a.total)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(standings)
 }
 
