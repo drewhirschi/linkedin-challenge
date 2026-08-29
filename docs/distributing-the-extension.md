@@ -26,6 +26,20 @@ all three from a single argument and then verifies they match, which is the whol
 It also refuses a plain-`http` URL that isn't localhost: the sync token is a bearer credential and
 would otherwise travel in clear text.
 
+## GitHub Release artifact
+
+Push a tag matching the manifest version to build and publish a durable GitHub Release:
+
+```sh
+git tag extension-v0.1.0
+git push origin extension-v0.1.0
+```
+
+The `Build extension release` workflow publishes both `challenge-sync-0.1.0.zip` and its SHA-256
+checksum. The tag must exactly match `extension-v<version from manifest.json>`; a mismatch fails
+the release instead of publishing a mislabeled package. The workflow can also be run manually with
+an explicit tag and production server URL.
+
 ## Route 1 — load unpacked (development, or a handful of colleagues)
 
 ```sh
