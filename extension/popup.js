@@ -62,6 +62,8 @@ async function render() {
     const errLine = $("error-line");
     errLine.hidden = !state.lastError;
     errLine.textContent = state.lastError || "";
+    $("diag-btn").classList.toggle("diagnostic-error", Boolean(state.lastError));
+    $("diag-btn").textContent = state.lastError ? "Sync failed — open diagnostics" : "Open diagnostics";
   } else {
     await renderPreflight();
   }
@@ -117,6 +119,13 @@ $("sync-btn").addEventListener("click", async () => {
     btn.textContent = "Sync now";
     render();
   }
+});
+
+// The website owns the full personal results view. Opening it through the worker keeps the
+// build-time server origin in one place and uses the same signed-in session as linking.
+$("dashboard-btn").addEventListener("click", async () => {
+  await send({ type: "OPEN_DASHBOARD" });
+  window.close();
 });
 
 // Diagnostics get a full extension page: popup clipboards are unreliable and the popup closes as

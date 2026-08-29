@@ -41,6 +41,7 @@ deploy-check:
     node --check extension/config.js
     node --check extension/linkedin.js
     node --check extension/popup.js
+    node --check extension/diagnostics.js
     node --check extension/storage.js
     node --check extension/sync.js
     bash -n extension/build.sh
@@ -65,6 +66,7 @@ check:
     node --check extension/config.js
     node --check extension/linkedin.js
     node --check extension/popup.js
+    node --check extension/diagnostics.js
     node --check extension/storage.js
     node --check extension/sync.js
     bash -n extension/build.sh

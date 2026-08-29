@@ -50,12 +50,14 @@ Content-Type: application/json
     "followerCount": 1234,
     "profileViews": 56              // author-only; null if not collected this run
   },
+  "postFeedComplete": true,          // safe to reconcile deleted posts only when page is under-full
   "posts": [
     {
       "urn": "urn:li:activity:7231000000000000000",
       "permalink": "https://www.linkedin.com/feed/update/urn:li:activity:7231000000000000000/",
       "createdAt": "2026-08-01T09:00:00Z",
-      "textPreview": "We just shipped ...",   // <= 280 chars
+      "textPreview": "We just shipped ...",   // <= 10,000 Unicode characters
+      "imageUrls": ["https://media.licdn.com/..."], // attached images; empty when none
       "metrics": {
         "impressions": 3400,        // author-only; null if unavailable
         "reactions": 45,

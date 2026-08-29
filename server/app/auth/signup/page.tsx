@@ -35,19 +35,19 @@ export default function Signup() {
           <div className="field">
             <label htmlFor="name">Name</label>
             <input id="name" autoComplete="name" autoFocus value={name}
-              onChange={(e) => setName(e.target.value)} required />
+              onChange={(e) => setName(e.target.value)} maxLength={100} required />
           </div>
           <div className="field">
             <label htmlFor="email">Email</label>
             <input id="email" type="email" autoComplete="email" value={email}
-              onChange={(e) => setEmail(e.target.value)} required />
+              onChange={(e) => setEmail(e.target.value)} maxLength={254} required />
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
             <div className="password-input">
               <input id="password" type={showPassword ? "text" : "password"}
                 autoComplete="new-password" value={password}
-                onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+                onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={128} required />
               <button className="password-toggle" type="button"
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword} onClick={() => setShowPassword((shown) => !shown)}>

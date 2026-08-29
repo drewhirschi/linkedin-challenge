@@ -56,6 +56,8 @@ async function runSync({ manual = false } = {}) {
       capturedAt: new Date().toISOString(),
       profile: snap.profile,
       posts: snap.posts,
+      excludedPostUrns: snap.excludedPostUrns,
+      postFeedComplete: snap.postFeedComplete,
     };
     const result = await pushSnapshot(payload);
     await setState({
@@ -138,6 +140,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         }
         case "OPEN_SIGN_IN":
           await chrome.tabs.create({ url: `${SERVER_URL}/auth/login` });
+          sendResponse({ ok: true });
+          break;
+        case "OPEN_DASHBOARD":
+          await chrome.tabs.create({ url: `${SERVER_URL}/me` });
           sendResponse({ ok: true });
           break;
         case "SYNC_NOW":

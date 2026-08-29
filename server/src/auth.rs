@@ -42,6 +42,32 @@ pub fn verify_password(pw: &str, hash: &str) -> bool {
     }
 }
 
+/// Shared validation for direct signup and invite redemption. Browser constraints are only a UX
+/// aid; the API remains the authority because it is callable without our form.
+pub fn account_validation_error(name: &str, email: &str, password: &str) -> Option<&'static str> {
+    let name_len = name.trim().chars().count();
+    if !(1..=100).contains(&name_len) {
+        return Some("name must be between 1 and 100 characters");
+    }
+    let email = email.trim();
+    let email_valid = email.len() <= 254
+        && !email.chars().any(char::is_whitespace)
+        && email.split_once('@').is_some_and(|(local, domain)| {
+            !local.is_empty() && !domain.is_empty() && domain.contains('.')
+        });
+    if !email_valid {
+        return Some("enter a valid email address");
+    }
+    let password_len = password.chars().count();
+    if password_len < 8 {
+        return Some("password must be at least 8 characters");
+    }
+    if password_len > 128 {
+        return Some("password must be at most 128 characters");
+    }
+    None
+}
+
 // --- cookies ---------------------------------------------------------------------------------
 
 /// Read one cookie value out of the `Cookie` header.
@@ -56,8 +82,13 @@ pub fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
 /// `Set-Cookie` value that establishes the session. `HttpOnly` keeps it away from page scripts;
 /// `SameSite=Lax` is enough: every mutation goes through fetch with a JSON content type.
 fn set_cookie(token: &str) -> String {
+    let secure = if std::env::var_os("VERCEL").is_some() {
+        "; Secure"
+    } else {
+        ""
+    };
     format!(
-        "{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_SECS}"
+        "{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_SECS}{secure}"
     )
 }
 
@@ -218,4 +249,26 @@ pub async fn member_from_bearer(db: &mut Db, headers: &HeaderMap) -> Option<Memb
         .await
         .ok()
         .flatten()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{account_validation_error, hash_password, verify_password};
+
+    #[test]
+    fn password_hash_verifies_only_the_original_password() {
+        let hash = hash_password("correct horse battery staple");
+        assert!(!hash.is_empty());
+        assert!(verify_password("correct horse battery staple", &hash));
+        assert!(!verify_password("wrong password", &hash));
+    }
+
+    #[test]
+    fn account_fields_are_bounded_and_validated() {
+        assert_eq!(account_validation_error("Ada", "ada@example.com", "password1"), None);
+        assert!(account_validation_error("", "ada@example.com", "password1").is_some());
+        assert!(account_validation_error("Ada", "not-an-email", "password1").is_some());
+        assert!(account_validation_error("Ada", "ada@example.com", "short").is_some());
+        assert!(account_validation_error("Ada", "ada@example.com", &"x".repeat(129)).is_some());
+    }
 }

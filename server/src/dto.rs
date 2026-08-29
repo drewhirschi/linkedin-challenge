@@ -112,6 +112,7 @@ pub struct PostStat {
     /// Post creation time, or the first snapshot's time when LinkedIn didn't give us one.
     pub posted_at: i64,
     pub text_preview: Option<String>,
+    pub image_urls: Vec<String>,
     pub is_repost: bool,
     pub impressions: i64,
     pub reactions: i64,
@@ -506,6 +507,9 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
             permalink: post.permalink.clone(),
             posted_at,
             text_preview: post.text_preview.clone(),
+            image_urls: post.image_urls_json.as_deref()
+                .and_then(|value| serde_json::from_str(value).ok())
+                .unwrap_or_default(),
             is_repost: post.is_repost,
             impressions: latest.and_then(|s| s.impressions).unwrap_or(0),
             reactions: latest.and_then(|s| s.reactions).unwrap_or(0),
@@ -662,6 +666,7 @@ fn clone_stat(s: &PostStat) -> PostStat {
         permalink: s.permalink.clone(),
         posted_at: s.posted_at,
         text_preview: s.text_preview.clone(),
+        image_urls: s.image_urls.clone(),
         is_repost: s.is_repost,
         impressions: s.impressions,
         reactions: s.reactions,

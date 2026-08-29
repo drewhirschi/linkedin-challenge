@@ -55,6 +55,7 @@ export default function Login() {
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              maxLength={254}
               required
             />
           </div>
@@ -67,6 +68,7 @@ export default function Login() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                maxLength={128}
                 required
               />
               <button

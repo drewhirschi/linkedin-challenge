@@ -17,11 +17,11 @@ cd extension
 ./build.sh http://localhost:3312 --dir            # -> dist/unpacked/ for development
 ```
 
-The server URL is a build-time constant in **two** files that must agree: `SERVER_URL` in
-`config.js` and the matching entry in `manifest.json`'s `host_permissions`. The extension reads the
+The server URL is a build-time constant reflected in `SERVER_URL` in `config.js`, plus
+`host_permissions` and `homepage_url` in `manifest.json`. The extension reads the
 site's session cookie, and Chrome only permits that for an origin the manifest declares — so a build
 with one updated and not the other fails at **Connect** with no useful message. `build.sh` writes
-both from a single argument and then verifies they match, which is the whole reason it exists.
+all three from a single argument and then verifies they match, which is the whole reason it exists.
 
 It also refuses a plain-`http` URL that isn't localhost: the sync token is a bearer credential and
 would otherwise travel in clear text.

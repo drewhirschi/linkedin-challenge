@@ -40,6 +40,7 @@ pub async fn connect() -> Db {
         "ALTER TABLE posts ADD COLUMN is_repost BOOLEAN NOT NULL DEFAULT FALSE",
     )
     .await;
+    add_column(&mut db, "ALTER TABLE posts ADD COLUMN image_urls_json TEXT").await;
     add_column(
         &mut db,
         "ALTER TABLE members ADD COLUMN is_system_admin BOOLEAN NOT NULL DEFAULT FALSE",
@@ -326,6 +327,9 @@ pub struct Post {
     /// LinkedIn post creation time (unix secs); 0 when unknown — bucket by first snapshot then.
     pub created_at: i64,
     pub text_preview: Option<String>,
+    /// JSON array of public LinkedIn CDN image URLs. JSON stays portable across our local SQLite
+    /// and production PostgreSQL drivers, where native array types differ.
+    pub image_urls_json: Option<String>,
     pub is_repost: bool,
 
     #[has_many]

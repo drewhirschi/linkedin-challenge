@@ -6,7 +6,9 @@
 
 use axum::{Extension, Json};
 use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
-use linkedin_challenge_server::auth::{establish_session, hash_password, member_by_email, verify_password};
+use linkedin_challenge_server::auth::{
+    account_validation_error, establish_session, hash_password, member_by_email, verify_password,
+};
 use linkedin_challenge_server::models::{ChallengeMembership, Competition, Invite, Member, Org};
 use linkedin_challenge_server::util::{new_bearer_token, now_unix};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
@@ -48,10 +50,8 @@ pub async fn post(
     Extension(mut db): Extension<Db>,
     Json(req): Json<JoinRequest>,
 ) -> ApiResult<(HeaderMap, Json<JoinResponse>)> {
-    if req.password.len() < 8 {
-        return Err(ApiError::bad_request(
-            "password must be at least 8 characters",
-        ));
+    if let Some(error) = account_validation_error(&req.name, &req.email, &req.password) {
+        return Err(ApiError::bad_request(error));
     }
 
     let invite = Invite::filter_by_code(req.invite_code.trim())

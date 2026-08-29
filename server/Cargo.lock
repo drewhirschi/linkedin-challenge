@@ -2112,6 +2112,7 @@ dependencies = [
  "nextrs",
  "rand 0.8.7",
  "serde",
+ "serde_json",
  "toasty",
  "tokio",
  "tower",

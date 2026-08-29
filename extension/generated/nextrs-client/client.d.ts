@@ -264,6 +264,7 @@ export interface PostPayload {
   didn't read any this time — it is not a claim that the post has none. */
     comments?: CommentPayload[];
     createdAt?: PostPayloadCreatedAt;
+    imageUrls?: string[];
     isRepost?: boolean;
     metrics: Metrics;
     permalink: string;
@@ -279,6 +280,7 @@ export interface PostStat {
     commentsByOthers: number;
     followersFromPost: number;
     id: number;
+    imageUrls: string[];
     impressions: number;
     impressionsInNetwork: number;
     impressionsOutOfNetwork: number;

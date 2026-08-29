@@ -2,8 +2,8 @@
 // change it: the extension reads the site's session cookie, which requires a matching entry in
 // `host_permissions` in manifest.json, and that cannot be edited at runtime either.
 //
-// Producing a production build means changing BOTH this constant and the manifest's
-// `host_permissions` to the deployed origin.
+// The release builder derives this constant, the manifest's `host_permissions`, and its
+// `homepage_url` from one deployed origin.
 export const SERVER_URL = "http://localhost:3312";
 
 /// Name of the session cookie the website sets — see `SESSION_COOKIE` in server/src/auth.rs.

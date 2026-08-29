@@ -29,12 +29,52 @@ function Metric({ label, value, sub }: { label: string; value: number; sub?: str
   );
 }
 
-function Post({ post }: { post: PostStat }) {
+function Post({ post, showMedia }: { post: PostStat; showMedia: boolean }) {
   const total = post.impressionsInNetwork + post.impressionsOutOfNetwork;
+  const [expanded, setExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    setExpanded(false);
+    setCanExpand(false);
+  }, [post.id, post.textPreview]);
+
+  useEffect(() => {
+    const text = textRef.current;
+    if (!text || expanded) return;
+    setCanExpand(text.scrollHeight > text.clientHeight + 1);
+  }, [expanded, post.textPreview]);
+
   return (
     <div className="post">
       {post.isRepost && <span className="post-kind">Repost</span>}
-      <p className="post-text">{post.textPreview || <span className="muted">(no preview)</span>}</p>
+      <p ref={textRef} className={`post-text${expanded ? "" : " collapsed"}`}>
+        {post.textPreview || <span className="muted">(no post text)</span>}
+      </p>
+      {canExpand && (
+        <button
+          type="button"
+          className="post-text-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Show less" : "…show more"}
+        </button>
+      )}
+      {showMedia && post.imageUrls.length > 0 && (
+        <div className={`post-media count-${Math.min(post.imageUrls.length, 4)}`}>
+          {post.imageUrls.map((url, index) => (
+            <img
+              key={url}
+              src={url}
+              alt={`Attached media ${index + 1} of ${post.imageUrls.length}`}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          ))}
+        </div>
+      )}
       <div className="metrics">
         <Metric label="Impressions" value={post.impressions} />
         <Metric label="Reactions" value={post.reactions} />
@@ -85,7 +125,15 @@ function Post({ post }: { post: PostStat }) {
   );
 }
 
-function Week({ group, gradedPerWeek }: { group: WeekGroup; gradedPerWeek: number }) {
+function Week({
+  group,
+  gradedPerWeek,
+  showMedia,
+}: {
+  group: WeekGroup;
+  gradedPerWeek: number;
+  showMedia: boolean;
+}) {
   const counted = Math.min(gradedPerWeek, group.posts.length);
   return (
     <section>
@@ -98,7 +146,7 @@ function Week({ group, gradedPerWeek }: { group: WeekGroup; gradedPerWeek: numbe
         </span>
       </div>
       {group.posts.map((post) => (
-        <Post key={post.id} post={post} />
+        <Post key={post.id} post={post} showMedia={showMedia} />
       ))}
     </section>
   );
@@ -114,6 +162,7 @@ function PostExplorer({
   onFilter,
   onSort,
   onPage,
+  showMedia,
 }: {
   posts: PostStat[];
   total: number;
@@ -124,6 +173,7 @@ function PostExplorer({
   onFilter: (value: string) => void;
   onSort: (value: (typeof POST_SORTS)[number]) => void;
   onPage: (value: number) => void;
+  showMedia: boolean;
 }) {
   const [filterInput, setFilterInput] = useState(filter);
   const filterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -184,7 +234,7 @@ function PostExplorer({
       ) : (
         <div className="post-list">
           {posts.map((post) => (
-            <Post key={post.id} post={post} />
+            <Post key={post.id} post={post} showMedia={showMedia} />
           ))}
         </div>
       )}
@@ -224,6 +274,7 @@ export function MemberResults({
   backHref?: string;
   backLabel?: string;
 }) {
+  const [showMedia, setShowMedia] = useState(false);
   const [{ filter, sort, page }, setParams] = useQueryStates({
     filter: parseAsString.withDefault(""),
     sort: parseAsStringLiteral(POST_SORTS).withDefault("newest"),
@@ -268,6 +319,8 @@ export function MemberResults({
           </a>
         </p>
       )}
+
+      <MediaToggle checked={showMedia} onChange={setShowMedia} />
 
       {!competition ? (
         <p className="lede">
@@ -317,6 +370,7 @@ export function MemberResults({
                 key={group.week}
                 group={group}
                 gradedPerWeek={competition.config.maxPostsPerWeek}
+                showMedia={showMedia}
               />
             ))
           )}
@@ -334,12 +388,14 @@ export function MemberResults({
         onFilter={(value) => void setParams({ filter: value, page: 1 })}
         onSort={(value) => void setParams({ sort: value, page: 1 })}
         onPage={(value) => void setParams({ page: value })}
+        showMedia={showMedia}
       />
     </>
   );
 }
 
 export function PersonalPosts({ displayName }: { displayName: string }) {
+  const [showMedia, setShowMedia] = useState(false);
   const [{ filter, sort, page }, setParams] = useQueryStates({
     filter: parseAsString.withDefault(""),
     sort: parseAsStringLiteral(POST_SORTS).withDefault("newest"),
@@ -368,6 +424,7 @@ export function PersonalPosts({ displayName }: { displayName: string }) {
         <h1 style={{ margin: 0 }}>{displayName}</h1>
       </div>
       <p className="lede">Your LinkedIn data belongs to you. Challenges can read it only after you join.</p>
+      <MediaToggle checked={showMedia} onChange={setShowMedia} />
       <PostExplorer
         posts={data.data.posts}
         total={data.data.total}
@@ -378,7 +435,21 @@ export function PersonalPosts({ displayName }: { displayName: string }) {
         onFilter={(value) => void setParams({ filter: value, page: 1 })}
         onSort={(value) => void setParams({ sort: value, page: 1 })}
         onPage={(value) => void setParams({ page: value })}
+        showMedia={showMedia}
       />
     </>
+  );
+}
+
+function MediaToggle({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <label className="media-toggle">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>Show attached media</span>
+    </label>
   );
 }

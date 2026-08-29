@@ -47,11 +47,13 @@ manifest = json.loads(manifest_path.read_text())
 hosts = [h for h in manifest["host_permissions"] if "linkedin.com" in h]
 hosts.append(f"{url}/*")
 manifest["host_permissions"] = hosts
+manifest["homepage_url"] = url
 manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 print(f"  server URL : {url}")
 print(f"  host perms : {hosts}")
 print(f"  version    : {manifest['version']}")
+print(f"  homepage   : {manifest['homepage_url']}")
 PY
 
 # Prove the two agree, so a mismatch can never ship.
@@ -60,8 +62,11 @@ import json, pathlib, re, sys
 out = pathlib.Path(sys.argv[1])
 server = re.search(r'export const SERVER_URL = "([^"]*)";', (out / "config.js").read_text()).group(1)
 hosts = json.loads((out / "manifest.json").read_text())["host_permissions"]
+homepage = json.loads((out / "manifest.json").read_text())["homepage_url"]
 if not any(h.startswith(server) for h in hosts):
     raise SystemExit(f"MISMATCH: SERVER_URL {server} has no matching host_permission in {hosts}")
+if homepage != server:
+    raise SystemExit(f"MISMATCH: SERVER_URL {server} does not match homepage_url {homepage}")
 print("  verified   : config.js and manifest.json agree")
 PY
 

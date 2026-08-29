@@ -12,6 +12,19 @@ use toasty::Db;
 use utoipa::ToSchema;
 
 const NEXT_SYNC_SECONDS: i64 = 6 * 3600;
+const MAX_POST_TEXT_CHARS: usize = 10_000;
+
+fn bounded_post_text(text: Option<&str>) -> Option<String> {
+    text.map(|value| value.chars().take(MAX_POST_TEXT_CHARS).collect())
+}
+
+fn bounded_image_urls(urls: &[String]) -> Vec<String> {
+    urls.iter()
+        .filter(|url| url.starts_with("https://media.licdn.com/") && url.chars().count() <= 2_048)
+        .take(10)
+        .cloned()
+        .collect()
+}
 
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +35,10 @@ pub struct SyncRequest {
     /// Nested originals included in normalized reshare responses, but not authored by this member.
     #[serde(default)]
     pub excluded_post_urns: Vec<String>,
+    /// True only when LinkedIn returned fewer than the requested page size, making absence from
+    /// `posts` evidence of deletion rather than pagination.
+    #[serde(default)]
+    pub post_feed_complete: bool,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -38,6 +55,8 @@ pub struct PostPayload {
     pub permalink: String,
     pub created_at: Option<String>,
     pub text_preview: Option<String>,
+    #[serde(default)]
+    pub image_urls: Vec<String>,
     #[serde(default)]
     pub is_repost: bool,
     pub metrics: Metrics,
@@ -128,9 +147,37 @@ pub async fn post(
         Post::filter_by_id(post.id).delete().exec(&mut db).await?;
     }
 
+    // A deleted-and-reposted LinkedIn post has a new activity URN. When the feed page is known to
+    // be complete, remove stored URNs LinkedIn no longer returns so the deleted original does not
+    // live forever beside its replacement. Never reconcile a full page: missing rows may be on the
+    // next page rather than deleted.
+    if req.post_feed_complete {
+        let current_urns: std::collections::HashSet<&str> =
+            req.posts.iter().map(|post| post.urn.as_str()).collect();
+        let stored = Post::filter(Post::fields().member_id().eq(member.id))
+            .exec(&mut db)
+            .await?;
+        for post in stored {
+            if current_urns.contains(post.urn.as_str()) {
+                continue;
+            }
+            PostComment::filter(PostComment::fields().post_id().eq(post.id))
+                .delete()
+                .exec(&mut db)
+                .await?;
+            PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post.id))
+                .delete()
+                .exec(&mut db)
+                .await?;
+            Post::filter_by_id(post.id).delete().exec(&mut db).await?;
+        }
+    }
+
     // Upsert each post by URN, then append a metric snapshot.
     let mut ingested = 0usize;
     for p in &req.posts {
+        let text_preview = bounded_post_text(p.text_preview.as_deref());
+        let image_urls_json = serde_json::to_string(&bounded_image_urls(&p.image_urls)).ok();
         let post_id = match Post::filter_by_urn(&p.urn).first().exec(&mut db).await? {
             Some(post) => {
                 // Don't let a post URN be claimed by a different member.
@@ -151,6 +198,9 @@ pub async fn post(
                 };
                 toasty::update!(Post::filter_by_id(post.id) {
                     created_at,
+                    permalink: &p.permalink,
+                    text_preview: text_preview.clone(),
+                    image_urls_json: image_urls_json.clone(),
                     is_repost: p.is_repost,
                 })
                 .exec(&mut db)
@@ -164,7 +214,8 @@ pub async fn post(
                     urn: &p.urn,
                     permalink: &p.permalink,
                     created_at,
-                    text_preview: p.text_preview.clone(),
+                    text_preview,
+                    image_urls_json,
                     is_repost: p.is_repost,
                 })
                 .exec(&mut db)

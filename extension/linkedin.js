@@ -252,7 +252,7 @@ async function getPostAnalytics(activityUrn) {
 // Fetch posts and the follower count that LinkedIn now includes alongside them. Keeping these in
 // one request avoids the retired `networkinfo` endpoint and matches the live response diagnostics.
 async function getPostFeed(memberUrn) {
-  if (!memberUrn) return { posts: [], followerCount: null, excludedPostUrns: [] };
+  if (!memberUrn) return { posts: [], followerCount: null, excludedPostUrns: [], postFeedComplete: false };
   let json;
   try {
     json = await voyagerFetch(
@@ -260,7 +260,7 @@ async function getPostFeed(memberUrn) {
         `&profileUrn=${encodeURIComponent(memberUrn)}`
     );
   } catch {
-    return { posts: [], followerCount: null, excludedPostUrns: [] };
+    return { posts: [], followerCount: null, excludedPostUrns: [], postFeedComplete: false };
   }
 
   const following = firstWith(
@@ -297,6 +297,7 @@ async function getPostFeed(memberUrn) {
       permalink: `${LINKEDIN_ORIGIN}/feed/update/${activityUrn}/`,
       createdAt: extractCreatedAt(u, activityUrn),
       textPreview: extractCommentary(u),
+      imageUrls: extractImageUrls(u),
       isRepost:
         Boolean(u["*resharedUpdate"]) ||
         serialized.includes('"RESHARED"') ||
@@ -314,6 +315,9 @@ async function getPostFeed(memberUrn) {
     posts: dedupeByUrn(posts),
     followerCount: following?.followerCount ?? null,
     excludedPostUrns: [...new Set(excludedPostUrns)],
+    // Only an under-full first page is authoritative for deletion. At exactly MAX_POSTS, an absent
+    // stored post may simply have fallen onto page two rather than having been deleted.
+    postFeedComplete: rootUpdates.size > 0 && rootUpdates.size < MAX_POSTS,
   };
 }
 
@@ -338,16 +342,32 @@ function extractCommentary(update) {
     update.text?.text ||
     (typeof update.commentary === "string" ? update.commentary : null);
   if (!text) return null;
-  return truncatePreview(text);
+  return normalizePostText(text);
 }
 
-export function truncatePreview(text) {
-  // Slice by Unicode code points, not UTF-16 code units. A code-unit slice can split an emoji's
-  // surrogate pair at the boundary; JSON.stringify then emits a lone `\udxxx` escape that strict
-  // server parsers reject. `toWellFormed` also replaces any malformed surrogate already present
-  // in LinkedIn's response.
-  const wellFormed = String(text).toWellFormed();
-  return Array.from(wellFormed).slice(0, 280).join("");
+function vectorImageUrl(vectorImage) {
+  if (!vectorImage?.rootUrl || !Array.isArray(vectorImage.artifacts)) return null;
+  const artifact = [...vectorImage.artifacts]
+    .filter((item) => typeof item?.fileIdentifyingUrlPathSegment === "string")
+    .sort((a, b) => (Number(b.width) * Number(b.height)) - (Number(a.width) * Number(a.height)))[0];
+  if (!artifact) return null;
+  const url = `${vectorImage.rootUrl}${artifact.fileIdentifyingUrlPathSegment}`;
+  return url.startsWith("https://media.licdn.com/") ? url : null;
+}
+
+function extractImageUrls(update) {
+  const images = Array.isArray(update?.content?.images) ? update.content.images : [];
+  const urls = images.flatMap((image) =>
+    (image?.attributes || []).map((attribute) => vectorImageUrl(attribute?.vectorImage)).filter(Boolean)
+  );
+  return [...new Set(urls)].slice(0, 10);
+}
+
+export function normalizePostText(text) {
+  // Keep the complete commentary, including its line breaks. `toWellFormed` replaces a malformed
+  // surrogate from LinkedIn before JSON serialization. Ten thousand Unicode code points is well
+  // above LinkedIn's normal post limit while still bounding storage if the response shape changes.
+  return Array.from(String(text).toWellFormed()).slice(0, 10_000).join("");
 }
 
 // Post creation time, derived from the activity URN rather than from a response field.
@@ -434,7 +454,7 @@ export async function isLinkedInSignedIn() {
 // data instead of guesses. Deliberately returns structure only — entity types and the names of
 // numeric fields — never post text, names, or ids, so the output is safe to paste into an issue.
 export async function diagnose() {
-  const out = { posts: null, followerCandidates: [] };
+  const out = { posts: null, followerCandidates: [], mediaCandidates: [] };
 
   const shapeOf = (entity) => ({
     type: entity?.$type || entity?.$recipeType || "(untyped)",
@@ -454,6 +474,28 @@ export async function diagnose() {
       .filter((n) => n.numericKeys.length),
   });
 
+  // Report media structure without reporting the media URLs themselves. Paths, value kinds, and
+  // URL origins are enough to implement an extractor against the live shape without exposing a
+  // private CDN token or identifying which image belongs to which post.
+  const MEDIA_KEY = /image|media|thumbnail|vector|artifact|rooturl|originalurl|displayimage/i;
+  const mediaShape = (node, path = "$", depth = 0, found = []) => {
+    if (found.length >= 100 || depth > 8 || !node || typeof node !== "object") return found;
+    for (const [key, value] of Object.entries(node)) {
+      const here = Array.isArray(node) ? `${path}[]` : `${path}.${key}`;
+      if (typeof value === "string" && (MEDIA_KEY.test(key) || /^https?:\/\//.test(value))) {
+        let origin = null;
+        if (/^https?:\/\//.test(value)) {
+          try { origin = new URL(value).origin; } catch { /* structure-only diagnostics */ }
+        }
+        found.push({ path: here, key, kind: origin ? "url" : value.startsWith("urn:") ? "urn" : "string", origin });
+      } else if (value && typeof value === "object") {
+        if (MEDIA_KEY.test(key)) found.push({ path: here, key, kind: Array.isArray(value) ? "array" : "object", origin: null });
+        mediaShape(value, here, depth + 1, found);
+      }
+    }
+    return found;
+  };
+
   try {
     const me = await getMe();
     const json = await voyagerFetch(
@@ -465,6 +507,12 @@ export async function diagnose() {
       includedCount: included(json).length,
       entities: included(json).map(shapeOf).filter((e) => e.numericKeys.length || e.nested.length),
     };
+    out.mediaCandidates = included(json)
+      .map((entity) => ({
+        type: entity?.$type || entity?.$recipeType || "(untyped)",
+        fields: mediaShape(entity),
+      }))
+      .filter((entity) => entity.fields.length);
   } catch (e) {
     out.posts = { error: String(e.message || e) };
   }
@@ -547,7 +595,7 @@ export async function collectSnapshot() {
   await sleep(REQUEST_DELAY_MS);
 
   // Posts arrive with engagement and follower count attached — one request, not one per post.
-  const { posts, followerCount, excludedPostUrns } = await getPostFeed(me.memberUrn);
+  const { posts, followerCount, excludedPostUrns, postFeedComplete } = await getPostFeed(me.memberUrn);
 
   for (const post of posts) {
     const analytics = await getPostAnalytics(post.urn);
@@ -560,5 +608,6 @@ export async function collectSnapshot() {
     profile: { followerCount, profileViews },
     posts,
     excludedPostUrns,
+    postFeedComplete,
   };
 }

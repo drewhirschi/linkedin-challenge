@@ -34,6 +34,9 @@ pub async fn post(
     Extension(mut db): Extension<Db>,
     Json(req): Json<LoginRequest>,
 ) -> ApiResult<(HeaderMap, Json<SessionResponse>)> {
+    if req.password.chars().count() > 128 {
+        return Err(ApiError::unauthorized("invalid email or password"));
+    }
     // Email is the login identifier for everyone — participants and admins alike.
     let Some(member) = member_by_email(&mut db, &req.email).await? else {
         return Err(ApiError::unauthorized("invalid email or password"));
