@@ -18,6 +18,11 @@ must be signed off again.
 
 ## One-time GitHub setup
 
+GitHub must support branch protection for the repository. For a private repository on a personal
+Free plan, GitHub returns `403` and requires either GitHub Pro or making the repository public. In
+that state, `just signoff` still publishes a visible status on the exact commit, but GitHub cannot
+enforce it as a merge blocker.
+
 In the repository settings, add a branch ruleset for `main` that:
 
 1. Requires a pull request before merging.
