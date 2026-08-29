@@ -12,7 +12,7 @@ Commit and push the exact revision you want reviewed, then run:
 just signoff
 ```
 
-The command refuses a dirty tree or an unpushed commit, runs `just check`, and posts
+The command refuses uncommitted tracked changes or an unpushed commit, runs `just check`, and posts
 `local-checks=success` to the current commit through `gh`. Any new commit has a different SHA and
 must be signed off again.
 

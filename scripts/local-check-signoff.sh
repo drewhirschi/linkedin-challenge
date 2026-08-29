@@ -5,8 +5,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-if [ -n "$(git status --porcelain)" ]; then
-  echo "Commit all changes before signing off; the status must describe one exact commit." >&2
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "Commit all tracked changes before signing off; the status must describe one exact commit." >&2
   exit 1
 fi
 command -v gh >/dev/null 2>&1 || { echo "GitHub CLI (gh) is required." >&2; exit 1; }
