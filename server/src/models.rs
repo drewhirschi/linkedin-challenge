@@ -107,6 +107,14 @@ pub async fn connect() -> Db {
     )
     .await;
     add_column(&mut db, "ALTER TABLE invites ADD COLUMN email TEXT").await;
+    // Email is the login identifier for everyone, so the database enforces uniqueness too — the
+    // signup-time check alone cannot rule out two concurrent registrations of one address.
+    // NULL (extension-only members) is exempt from the constraint on both engines.
+    execute_migration(
+        &mut db,
+        "CREATE UNIQUE INDEX IF NOT EXISTS members_email ON members (email)",
+    )
+    .await;
     let membership_table = if url.starts_with("postgres:") || url.starts_with("postgresql:") {
         "CREATE TABLE IF NOT EXISTS challenge_memberships (id BIGSERIAL PRIMARY KEY, challenge_id BIGINT NOT NULL, member_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)"
     } else {
@@ -268,7 +276,8 @@ pub struct Member {
     /// Operator of the product itself, across every org — unlocks the system panel and
     /// impersonation. Granted by seed or by hand, never through any API.
     pub is_system_admin: bool,
-    /// Admin login email (None for participants). Uniqueness enforced in code at signup.
+    /// Login email (None for legacy extension-only members). Unique: checked at signup and
+    /// backed by the `members_email` index applied in [`connect`].
     pub email: Option<String>,
     /// Argon2 password hash for admins (None for participants).
     pub password_hash: Option<String>,
