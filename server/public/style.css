@@ -515,3 +515,76 @@ main:has(.cup) { max-width: 1200px; }
   .cup-list li { grid-template-columns: 24px 36px minmax(0, 1fr) auto; }
   .cup-list li a { grid-column: 3 / -1; }
 }
+
+/* --- small screens --------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  /* The sidebar becomes a compact header: brand, then one horizontally scrollable row of links.
+     Section labels and the nested challenge sub-links are noise at this width. */
+  .sidebar { padding: 10px 14px 8px; gap: 0; }
+  .brand { padding: 2px 0 8px; }
+  .side-nav {
+    flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  .side-nav::-webkit-scrollbar { display: none; }
+  .nav-section, .nav-subsection { display: none; }
+  .nav-link { white-space: nowrap; padding: 7px 11px; font-size: 13px; background: var(--bg); }
+  .nav-link.nested { margin-left: 0; }
+  .challenge-nav { display: contents; }
+  .side-foot { margin-top: 0; padding-top: 8px; }
+}
+
+@media (max-width: 600px) {
+  main:has(.cup) { padding: 14px 12px 40px; }
+  .cup-live { justify-content: center; font-size: 12px; }
+  .cup-hero { padding-top: 16px; }
+  .cup-trophy { width: 92px; height: 92px; }
+  .cup-hero .tagline { font-size: 15px; margin-bottom: 16px; }
+  .cup-prizes { gap: 8px; margin-bottom: 18px; }
+  .cup-prizes .prize { min-width: 0; flex: 1 1 40%; padding: 10px 12px; }
+  .cup-prizes .prize .amount { font-size: 22px; }
+  .cup-prizes .prize .label { font-size: 10px; letter-spacing: .1em; }
+  .cup-hero .welcome { font-size: 28px; }
+  .cup-card { padding: 16px; border-radius: 14px; }
+
+  .cup-season .marks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 13px; }
+  .cup-season .marks span:nth-child(2) { grid-column: 1 / -1; order: -1; font-size: 15px; }
+  .cup-season .marks span:nth-child(3) { text-align: right; }
+
+  .cup-stats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .cup-stats .stat { padding: 14px 6px; }
+  .cup-stats .n { font-size: 20px; }
+  .cup-stats .k { font-size: 9px; letter-spacing: .06em; }
+
+  .cup-toggle button { padding: 10px 16px; font-size: 14px; }
+  .cup-me h2 { font-size: 24px; }
+  .cup-me .head { gap: 8px; }
+  .cup-me .points .n { font-size: 40px; }
+  .cup-me .facts { gap: 16px 28px; margin-top: 20px; padding-bottom: 18px; }
+  .cup-me .facts .v { font-size: 18px; }
+  .cup-me .cta { gap: 12px; font-size: 15px; }
+  .cup-btn { padding: 12px 20px; font-size: 15px; }
+
+  /* Rows: rank and avatar in one column, everything else stacked beside them, with the total on
+     the name line instead of under the chips. */
+  .cup-row { grid-template-columns: 24px 44px minmax(0, 1fr) auto; gap: 8px 10px; padding: 14px; align-items: start; }
+  .cup-row .rank { font-size: 20px; padding-top: 10px; }
+  .cup-row .cup-avatar { width: 44px !important; height: 44px !important; font-size: 15px !important; }
+  .cup-row .body { display: contents; }
+  .cup-row .name { grid-column: 3; grid-row: 1; font-size: 17px; flex-wrap: wrap; gap: 6px; }
+  .cup-row .sub { grid-column: 3 / -1; grid-row: 2; margin: -4px 0 2px; font-size: 13px; }
+  .cup-row .chips { grid-column: 1 / -1; grid-row: 3; gap: 6px; }
+  .cup-row .total { grid-column: 4; grid-row: 1; text-align: right; }
+  .cup-row .total .n { font-size: 22px; }
+  .cup-row .total .k { font-size: 9px; }
+  .cup-chip { font-size: 12px; padding: 4px 8px; }
+
+  .cup-nudge { padding: 16px; font-size: 15px; gap: 12px; }
+  .cup-list li { grid-template-columns: 22px 34px minmax(0, 1fr) auto; gap: 10px; font-size: 15px; padding: 12px 0; }
+  .cup-list li > a { display: none; }
+  .cup-top-post .name { font-size: 18px; }
+  .cup-foot { font-size: 14px; }
+  .admin-strip .metrics { gap: 10px 16px; }
+}
+.cup-list .who-link { color: inherit; text-decoration: none; font-weight: inherit; }
+.cup-list .who-link:hover { text-decoration: underline; }

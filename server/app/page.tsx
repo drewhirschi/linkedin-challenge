@@ -431,7 +431,7 @@ export function ChallengeLeaderboard({ fixedChallengeId }: { fixedChallengeId?: 
                     <span className="rank">{row.rank}</span>
                     <Avatar name={row.displayName} size={40} />
                     <span className="who">
-                      {row.displayName}
+                      <a className="who-link" href={`/members/${row.memberId}?challengeId=${competition.id}`}>{row.displayName}</a>
                       {row.memberId === viewerMemberId && <span className="muted"> · you</span>}
                     </span>
                     <span className="pts">{fmtNum(pointsFor(row, mode))}</span>
