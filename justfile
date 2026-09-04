@@ -20,13 +20,23 @@ doctor:
 dev:
     cd server && DATABASE_URL=turso:linkedin.db cargo dev
 
-# Release only: a debug build would seed the local test account into production. Startup applies
-# the additive schema migrations, exactly as a deploy would.
+# Release only: a debug build would seed the local test account into production and apply
+# migrations on startup. Run `just migrate-prod` first if the schema changed.
 # Run a release build locally against the PRODUCTION database (credentials from server/.env.local).
 run-prod:
     cd server && test -f .env.local || { echo "missing server/.env.local (run: vercel env pull .env.local)" >&2; exit 1; }
     cd server && cargo build --release --bin linkedin-challenge-server
     cd server && set -a && . ./.env.local && set +a && DATABASE_URL="$DATABASE_URL_UNPOOLED" PORT=3312 ./target/release/linkedin-challenge-server
+
+# Apply the schema and additive migrations to the local database. Idempotent.
+migrate:
+    cd server && DATABASE_URL=turso:linkedin.db cargo run --quiet --bin migrate
+
+# Apply the schema and additive migrations to the PRODUCTION database (credentials from
+# server/.env.local). `just deploy` runs this automatically before uploading a build.
+migrate-prod:
+    cd server && test -f .env.local || { echo "missing server/.env.local (run: vercel env pull .env.local)" >&2; exit 1; }
+    cd server && set -a && . ./.env.local && set +a && DATABASE_URL="$DATABASE_URL_UNPOOLED" cargo run --quiet --release --bin migrate
 
 # Ensure the local account and Q3 World Cup challenge exist without resetting synced data.
 seed-local:
