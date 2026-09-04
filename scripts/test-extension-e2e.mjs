@@ -187,9 +187,13 @@ try {
   else ok(`${posts.length} posts (postFeedComplete=${report.postFeedComplete})`);
   const bad = posts.filter((p) => !/^urn:li:activity:\d+$/.test(p.urn) || !p.createdAt);
   if (bad.length) fail(`${bad.length} posts missing a URN or createdAt`);
-  const withMetrics = posts.filter((p) => p.metrics.reactions != null || p.metrics.comments != null);
-  if (withMetrics.length === 0) fail("no post carries reaction/comment counts — SocialActivityCounts parsing broke");
-  else ok(`${withMetrics.length}/${posts.length} posts carry engagement counts`);
+  // Own posts must carry counts from the feed itself. Reposts may not — the counts belong to the
+  // original — and the per-post analytics page fills those in during a real sync.
+  const own = posts.filter((p) => !p.isRepost);
+  const withMetrics = own.filter((p) => p.metrics.reactions != null || p.metrics.comments != null);
+  if (own.length && withMetrics.length < own.length * 0.9) {
+    fail(`only ${withMetrics.length}/${own.length} own posts carry engagement counts — SocialActivityCounts resolution is missing cases`);
+  } else ok(`${withMetrics.length}/${own.length} own posts carry engagement counts (${posts.length - own.length} reposts)`);
 
   // Comments with authors
   if (report.commentsFor) {

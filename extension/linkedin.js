@@ -295,7 +295,7 @@ export async function getPostFeed(memberUrn) {
       excludedPostUrns.push(nestedReshareUrn);
     }
 
-    const social = resolveSocialDetail(json, activityUrn);
+    const social = resolveSocialDetail(json, activityUrn, u);
     posts.push({
       urn: activityUrn,
       permalink: `${LINKEDIN_ORIGIN}/feed/update/${activityUrn}/`,
@@ -504,14 +504,28 @@ function extractCreatedAt(update, activityUrn) {
 // We match by activity URN rather than by chasing the reference key, because the entity URN embeds
 // the activity id — `urn:li:fs_socialActivityCounts:urn:li:activity:123` — and that survives
 // LinkedIn renaming the reference field.
-function resolveSocialDetail(json, activityUrn) {
+//
+// Some posts key their counts by a different URN (a ugcPost or share id) so the activity-URN
+// match finds nothing; for those, follow the update's own `*socialDetail` reference to its
+// SocialDetail and that entity's `*totalSocialActivityCounts` reference. Either route lands on
+// the same entity; the reference is tried first, the URN match is the fallback.
+function resolveSocialDetail(json, activityUrn, update) {
   const isCounts = (e) =>
     (e?.$type || "").endsWith("SocialActivityCounts") ||
     e?.numLikes != null ||
     e?.numImpressions != null;
+  const byUrn = (urn) => (urn ? included(json).find((e) => e && e.entityUrn === urn) : null);
 
+  const detailUrn = update?.["*socialDetail"] || update?.socialDetail?.entityUrn || null;
+  const detail = byUrn(detailUrn);
+  const referenced = byUrn(detail?.["*totalSocialActivityCounts"]);
+  // The counts entity shares the social detail's key: `fs_socialDetail:X` ↔ `fs_socialActivityCounts:X`.
+  const derived = detailUrn ? byUrn(String(detailUrn).replace("fs_socialDetail:", "fs_socialActivityCounts:")) : null;
   const counts =
-    included(json).find((e) => isCounts(e) && String(e.entityUrn || "").includes(activityUrn)) || {};
+    (referenced && isCounts(referenced) ? referenced : null) ||
+    (derived && isCounts(derived) ? derived : null) ||
+    included(json).find((e) => isCounts(e) && String(e.entityUrn || "").includes(activityUrn)) ||
+    {};
 
   return {
     reactions: numeric(counts.numLikes),
