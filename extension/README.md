@@ -54,7 +54,9 @@ so the LinkedIn Voyager calls in `linkedin.js` are unaffected.
 
 ## Cadence & etiquette
 
-Automatic scrapes run twice a day with random jitter, sequentially, with a short delay between
+The worker checks every 15 minutes whether a sync is due and runs one once 12 hours (plus a
+per-install jitter) have passed since the last — so a laptop that is only open now and then
+syncs as soon as it is back online. Scrapes run sequentially, with a short delay between
 requests. A floor in code enforces that independently of the alarm, because Chrome can fire alarms
 early after a wake-from-sleep or a worker restart.
 

@@ -1,10 +1,20 @@
 //! Scoring is fully derived from snapshots at read time — nothing is precomputed or stored.
 //!
-//! Per member, per competition window:
-//!  * Post points: for each post created in-window, take its latest snapshot, score its engagement,
-//!    keep only the top `max_posts_per_week` posts in each ISO-week bucket, then sum. Optionally
-//!    normalize by follower count so small and large accounts compete fairly.
-//!  * Profile points: followers gained + profile views accrued across the window.
+//! Per member, per competition window, three buckets (the "three ways to score"):
+//!  * **Show up**: `per_post` points for each in-window post, at most `max_posts_per_week` a week.
+//!  * **Keep showing up**: `per_active_week` for every week with at least one post, plus one streak
+//!    bonus — `streak_long_bonus` once the best run of consecutive active weeks reaches
+//!    `streak_long_weeks`, otherwise `streak_short_bonus` at `streak_short_weeks`.
+//!  * **Engagement**: each post's reactions/comments/reposts/... are priced by the `per_*` rates.
+//!    A post counts fully up to `engagement_cap` and then keeps earning at
+//!    `engagement_over_cap_rate`, so a post that goes big still counts for more. Only the best
+//!    `max_posts_per_week` posts a week count, and the sum is optionally scaled by
+//!    `follower_baseline / follower_count` so audience size doesn't decide the board.
+//!
+//! Profile points (followers gained, profile views) remain available for challenges that price
+//! them; the LinkedIn Cup rules leave those rates at zero.
+
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use toasty::Db;
@@ -12,16 +22,31 @@ use toasty::Db;
 use crate::models::{
     ChallengeMembership, Competition, Member, Post, PostComment, PostSnapshot, ProfileSnapshot,
 };
+use crate::util::now_unix;
 
 pub const WEEK_SECONDS: i64 = 7 * 86400;
 
-/// Per-competition scoring parameters, stored as JSON on the `Competition` row.
+/// Per-competition scoring parameters, stored as typed columns on the `Competition` row.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ScoringConfig {
     /// Posts beyond this many per week don't score (only the highest-scoring ones count).
     #[schema(required)]
     pub max_posts_per_week: u32,
+    /// "Show up": points for each post, up to `max_posts_per_week` a week.
+    #[schema(required)]
+    pub per_post: f64,
+    /// "Keep showing up": points for every week with at least one post.
+    #[schema(required)]
+    pub per_active_week: f64,
+    #[schema(required)]
+    pub streak_short_weeks: u32,
+    #[schema(required)]
+    pub streak_short_bonus: f64,
+    #[schema(required)]
+    pub streak_long_weeks: u32,
+    #[schema(required)]
+    pub streak_long_bonus: f64,
     #[schema(required)]
     pub per_reaction: f64,
     #[schema(required)]
@@ -35,31 +60,63 @@ pub struct ScoringConfig {
     pub per_save: f64,
     #[schema(required)]
     pub per_impression: f64,
+    /// A post's engagement counts fully up to this many points; 0 means no cap.
+    #[schema(required)]
+    pub engagement_cap: f64,
+    /// Rate at which engagement beyond the cap keeps earning (0.5 = half rate).
+    #[schema(required)]
+    pub engagement_over_cap_rate: f64,
     #[schema(required)]
     pub per_follower_gained: f64,
     #[schema(required)]
     pub per_profile_view: f64,
-    /// If true, post points are scaled by `follower_baseline / follower_count`.
+    /// If true, engagement points are scaled by `follower_baseline / follower_count`.
     #[schema(required)]
     pub normalize_by_followers: bool,
     #[schema(required)]
     pub follower_baseline: i64,
+    /// Prize money, in whole dollars; 0 hides the prize.
+    #[schema(required)]
+    pub prize_first: i64,
+    #[schema(required)]
+    pub prize_second: i64,
+    #[schema(required)]
+    pub prize_third: i64,
+    /// Guaranteed to everyone who posts `participation_posts` times or more in the window.
+    #[schema(required)]
+    pub prize_participation: i64,
+    #[schema(required)]
+    pub participation_posts: i64,
 }
 
 impl Default for ScoringConfig {
+    /// The LinkedIn Cup rules: show up, keep showing up, earn engagement.
     fn default() -> Self {
         Self {
             max_posts_per_week: 3,
-            per_reaction: 1.0,
+            per_post: 10.0,
+            per_active_week: 20.0,
+            streak_short_weeks: 4,
+            streak_short_bonus: 25.0,
+            streak_long_weeks: 8,
+            streak_long_bonus: 75.0,
+            per_reaction: 0.2,
             per_comment: 5.0,
-            per_repost: 5.0,
-            per_send: 5.0,
-            per_save: 3.0,
-            per_impression: 0.01,
-            per_follower_gained: 10.0,
-            per_profile_view: 0.5,
+            per_repost: 0.0,
+            per_send: 0.0,
+            per_save: 0.0,
+            per_impression: 0.0,
+            engagement_cap: 150.0,
+            engagement_over_cap_rate: 0.5,
+            per_follower_gained: 0.0,
+            per_profile_view: 0.0,
             normalize_by_followers: true,
             follower_baseline: 1000,
+            prize_first: 2500,
+            prize_second: 1500,
+            prize_third: 1000,
+            prize_participation: 250,
+            participation_posts: 20,
         }
     }
 }
@@ -70,18 +127,89 @@ impl ScoringConfig {
     pub fn from_competition(c: &Competition) -> Self {
         Self {
             max_posts_per_week: c.max_posts_per_week.clamp(0, u32::MAX as i64) as u32,
+            per_post: c.per_post,
+            per_active_week: c.per_active_week,
+            streak_short_weeks: c.streak_short_weeks.clamp(0, u32::MAX as i64) as u32,
+            streak_short_bonus: c.streak_short_bonus,
+            streak_long_weeks: c.streak_long_weeks.clamp(0, u32::MAX as i64) as u32,
+            streak_long_bonus: c.streak_long_bonus,
             per_reaction: c.per_reaction,
             per_comment: c.per_comment,
             per_repost: c.per_repost,
             per_send: c.per_send,
             per_save: c.per_save,
             per_impression: c.per_impression,
+            engagement_cap: c.engagement_cap,
+            engagement_over_cap_rate: c.engagement_over_cap_rate,
             per_follower_gained: c.per_follower_gained,
             per_profile_view: c.per_profile_view,
             normalize_by_followers: c.normalize_by_followers,
             follower_baseline: c.follower_baseline,
+            prize_first: c.prize_first,
+            prize_second: c.prize_second,
+            prize_third: c.prize_third,
+            prize_participation: c.prize_participation,
+            participation_posts: c.participation_posts,
         }
     }
+
+    /// Raw engagement points for one post, before the cap and before follower scaling.
+    pub fn raw_engagement(&self, e: &Engagement) -> f64 {
+        e.reactions as f64 * self.per_reaction
+            + e.comments as f64 * self.per_comment
+            + e.reposts as f64 * self.per_repost
+            + e.sends as f64 * self.per_send
+            + e.saves as f64 * self.per_save
+            + e.impressions as f64 * self.per_impression
+    }
+
+    /// Engagement points for one post after the cap: full value up to `engagement_cap`, then the
+    /// remainder at `engagement_over_cap_rate`.
+    pub fn post_engagement(&self, e: &Engagement) -> f64 {
+        let raw = self.raw_engagement(e);
+        if self.engagement_cap <= 0.0 || raw <= self.engagement_cap {
+            raw
+        } else {
+            self.engagement_cap + (raw - self.engagement_cap) * self.engagement_over_cap_rate
+        }
+    }
+
+    /// The streak bonus earned by a best run of `best_streak` consecutive active weeks.
+    pub fn streak_bonus(&self, best_streak: u32) -> f64 {
+        if self.streak_long_weeks > 0 && best_streak >= self.streak_long_weeks {
+            self.streak_long_bonus
+        } else if self.streak_short_weeks > 0 && best_streak >= self.streak_short_weeks {
+            self.streak_short_bonus
+        } else {
+            0.0
+        }
+    }
+
+    /// The multiplier applied to engagement points for an account with this many followers.
+    pub fn follower_factor(&self, followers: i64) -> f64 {
+        if self.normalize_by_followers && followers > 0 && self.follower_baseline > 0 {
+            self.follower_baseline as f64 / followers as f64
+        } else {
+            1.0
+        }
+    }
+
+    /// Number of scoring weeks in a window (the last, partial week counts).
+    pub fn weeks_in(start_at: i64, end_at: i64) -> i64 {
+        ((end_at - start_at).max(0) / WEEK_SECONDS) + 1
+    }
+}
+
+/// The engagement counts scoring prices, taken from a post's latest snapshot with comments
+/// replaced by the ones other people wrote whenever we have read them.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Engagement {
+    pub reactions: i64,
+    pub comments: i64,
+    pub reposts: i64,
+    pub sends: i64,
+    pub saves: i64,
+    pub impressions: i64,
 }
 
 /// Choose the competition to display: prefer an active one whose window contains `now`, then any
@@ -116,11 +244,217 @@ pub struct Standing {
     pub display_name: String,
     pub profile_url: Option<String>,
     pub follower_count: i64,
+    /// Followers gained across the window (latest in-window reading minus the first).
+    pub follower_growth: i64,
+    pub show_up_points: f64,
+    pub consistency_points: f64,
+    pub engagement_points: f64,
+    /// `show_up + engagement` — the post-derived part of the score.
     pub post_points: f64,
     pub profile_points: f64,
     pub total: f64,
+    /// Points earned in the current scoring week (show up + active week + engagement of this
+    /// week's posts). Streak bonuses are excluded because they belong to the whole run.
+    pub week_points: f64,
     pub graded_posts: usize,
     pub total_posts: usize,
+    pub active_weeks: u32,
+    /// Consecutive active weeks ending at the current (or, if it is quiet so far, previous) week.
+    pub streak_weeks: u32,
+    pub best_streak_weeks: u32,
+}
+
+/// Everything scoring reads, fetched in a fixed handful of queries and indexed in memory.
+///
+/// The naive shape — one query per member, then several per post — costs a round trip each,
+/// which is nothing against a local file and 20–40 seconds against a remote Postgres. Loading
+/// each table once for the members in question keeps a board at six queries regardless of size.
+#[derive(Default)]
+pub struct Dataset {
+    pub members: HashMap<i64, Member>,
+    pub posts_by_member: HashMap<i64, Vec<Post>>,
+    /// Sorted by `captured_at` ascending.
+    pub snapshots_by_post: HashMap<i64, Vec<PostSnapshot>>,
+    pub comments_by_post: HashMap<i64, Vec<PostComment>>,
+    /// Sorted by `captured_at` ascending.
+    pub profile_by_member: HashMap<i64, Vec<ProfileSnapshot>>,
+}
+
+impl Dataset {
+    /// Load the members with these ids and all of their posts, snapshots, comments, and profile
+    /// readings. Five queries, or none when `member_ids` is empty.
+    pub async fn load(db: &mut Db, member_ids: &[i64]) -> toasty::Result<Self> {
+        let mut data = Self::default();
+        if member_ids.is_empty() {
+            return Ok(data);
+        }
+        let ids: Vec<i64> = member_ids.to_vec();
+
+        for member in Member::filter(Member::fields().id().in_list(ids.clone()))
+            .exec(&mut *db)
+            .await?
+        {
+            data.members.insert(member.id, member);
+        }
+
+        let posts = Post::filter(Post::fields().member_id().in_list(ids.clone()))
+            .exec(&mut *db)
+            .await?;
+        let post_ids: Vec<i64> = posts.iter().map(|p| p.id).collect();
+        for post in posts {
+            data.posts_by_member.entry(post.member_id).or_default().push(post);
+        }
+
+        if !post_ids.is_empty() {
+            let mut snapshots =
+                PostSnapshot::filter(PostSnapshot::fields().post_id().in_list(post_ids.clone()))
+                    .exec(&mut *db)
+                    .await?;
+            snapshots.sort_by_key(|s| s.captured_at);
+            for snapshot in snapshots {
+                data.snapshots_by_post.entry(snapshot.post_id).or_default().push(snapshot);
+            }
+            for comment in
+                PostComment::filter(PostComment::fields().post_id().in_list(post_ids))
+                    .exec(&mut *db)
+                    .await?
+            {
+                data.comments_by_post.entry(comment.post_id).or_default().push(comment);
+            }
+        }
+
+        let mut profiles =
+            ProfileSnapshot::filter(ProfileSnapshot::fields().member_id().in_list(ids))
+                .exec(&mut *db)
+                .await?;
+        profiles.sort_by_key(|p| p.captured_at);
+        for profile in profiles {
+            data.profile_by_member.entry(profile.member_id).or_default().push(profile);
+        }
+        Ok(data)
+    }
+
+    /// Load everyone who joined `comp`, plus their data. Six queries.
+    pub async fn load_for_competition(db: &mut Db, comp: &Competition) -> toasty::Result<Self> {
+        let memberships =
+            ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
+                .exec(&mut *db)
+                .await?;
+        let ids: Vec<i64> = memberships.iter().map(|m| m.member_id).collect();
+        Self::load(db, &ids).await
+    }
+
+    pub fn posts(&self, member_id: i64) -> &[Post] {
+        self.posts_by_member.get(&member_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+    pub fn snapshots(&self, post_id: i64) -> &[PostSnapshot] {
+        self.snapshots_by_post.get(&post_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+    pub fn comments(&self, post_id: i64) -> &[PostComment] {
+        self.comments_by_post.get(&post_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+    pub fn profile(&self, member_id: i64) -> &[ProfileSnapshot] {
+        self.profile_by_member.get(&member_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// The post's own creation time, or its first snapshot when LinkedIn didn't give us one.
+    pub fn posted_at(&self, post: &Post) -> Option<i64> {
+        if post.created_at > 0 {
+            Some(post.created_at)
+        } else {
+            self.snapshots(post.id).first().map(|s| s.captured_at)
+        }
+    }
+    pub fn latest_snapshot_before(&self, post_id: i64, before: i64) -> Option<&PostSnapshot> {
+        self.snapshots(post_id).iter().rev().find(|s| s.captured_at <= before)
+    }
+    /// Comments that score for a post: LinkedIn's own total minus the author's comments we have
+    /// seen. The extension reads the rendered post page, which shows only the first several
+    /// comments, so the rows are a sample — never a count. When we have read none at all the
+    /// total stands as is.
+    pub fn scored_comments(&self, post_id: i64, linkedin_total: i64) -> i64 {
+        let rows = self.comments(post_id);
+        let self_seen = rows.iter().filter(|c| c.is_self).count() as i64;
+        let others_seen = rows.len() as i64 - self_seen;
+        (linkedin_total - self_seen).max(others_seen).max(0)
+    }
+}
+
+/// One post's line in a member's accounting.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LedgerPost {
+    pub post_id: i64,
+    pub permalink: String,
+    pub text_preview: Option<String>,
+    pub posted_at: i64,
+    pub is_repost: bool,
+    pub reactions: i64,
+    /// Comments by other people — what is priced. LinkedIn's total is `comments_total`.
+    pub comments: i64,
+    pub comments_total: i64,
+    pub reposts: i64,
+    pub sends: i64,
+    pub saves: i64,
+    pub impressions: i64,
+    /// Engagement before the cap.
+    pub raw_engagement: f64,
+    /// Engagement after the cap, before follower scaling.
+    pub capped_engagement: f64,
+    /// Engagement after follower scaling — what lands in the total when counted.
+    pub scaled_engagement: f64,
+    /// Show-up points for this post when counted.
+    pub show_up_points: f64,
+    /// False when the post fell outside the best `max_posts_per_week` for its week.
+    pub counted: bool,
+    /// True when no snapshot has been captured for it yet.
+    pub no_data: bool,
+}
+
+/// One scoring week in a member's accounting.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LedgerWeek {
+    /// 1-based.
+    pub week: i64,
+    pub start_at: i64,
+    pub end_at: i64,
+    pub active: bool,
+    pub posts: Vec<LedgerPost>,
+    pub show_up_points: f64,
+    pub active_week_points: f64,
+    pub engagement_points: f64,
+    pub total: f64,
+}
+
+/// A member's full accounting for one challenge: every post, every week, every rule applied.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Ledger {
+    pub weeks: Vec<LedgerWeek>,
+    pub follower_count: i64,
+    /// True when no follower reading exists, so engagement is not scaled at all.
+    pub followers_unknown: bool,
+    /// The multiplier applied to engagement (`follower_baseline / follower_count`).
+    pub follower_factor: f64,
+    pub show_up_points: f64,
+    pub active_weeks: u32,
+    pub active_week_points: f64,
+    pub best_streak_weeks: u32,
+    pub streak_bonus: f64,
+    pub consistency_points: f64,
+    pub engagement_points: f64,
+    /// Engagement before follower scaling, for the "what scaling cost you" line.
+    pub unscaled_engagement_points: f64,
+    pub profile_points: f64,
+    pub total: f64,
+}
+
+/// The full accounting behind one member's standing, or None when they have no data.
+pub fn ledger_for(comp: &Competition, data: &Dataset, member_id: i64, now: i64) -> Option<Ledger> {
+    let member = data.members.get(&member_id)?;
+    let cfg = ScoringConfig::from_competition(comp);
+    score_member_full(member, comp, &cfg, data, now).map(|(_, ledger)| ledger)
 }
 
 /// Compute the full leaderboard for a competition, sorted by total score descending.
@@ -128,114 +462,137 @@ pub struct Standing {
 /// Ranks only users who explicitly joined this challenge. Membership is the user's grant for the
 /// challenge to read and score their post data.
 pub async fn compute_standings(db: &mut Db, comp: &Competition) -> toasty::Result<Vec<Standing>> {
+    let data = Dataset::load_for_competition(db, comp).await?;
+    Ok(standings_from(comp, &data, now_unix()))
+}
+
+/// The leaderboard over already-loaded data; no queries.
+pub fn standings_from(comp: &Competition, data: &Dataset, now: i64) -> Vec<Standing> {
     let cfg = ScoringConfig::from_competition(comp);
-    let memberships =
-        ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
-            .exec(&mut *db)
-            .await?;
-
-    let mut standings = Vec::new();
-    for membership in memberships {
-        let Some(member) = Member::filter_by_id(membership.member_id)
-            .first()
-            .exec(&mut *db)
-            .await?
-        else {
-            continue;
-        };
-        if let Some(standing) = score_member(db, &member, comp, &cfg).await? {
-            standings.push(standing);
-        }
-    }
-
+    let mut standings: Vec<Standing> = data
+        .members
+        .values()
+        .filter_map(|member| score_member(member, comp, &cfg, data, now))
+        .collect();
     standings.sort_by(|a, b| {
         b.total
             .partial_cmp(&a.total)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.display_name.cmp(&b.display_name))
     });
-    Ok(standings)
+    standings
 }
 
-async fn score_member(
-    db: &mut Db,
+/// The 0-based scoring week that `now` falls in, clamped to the window.
+pub fn current_week(comp: &Competition, now: i64) -> i64 {
+    let last = (comp.end_at - comp.start_at).max(0) / WEEK_SECONDS;
+    ((now - comp.start_at) / WEEK_SECONDS).clamp(0, last)
+}
+
+/// Length of the run of consecutive active weeks that ends at `through` (or the week before it
+/// when `through` itself is quiet so far).
+pub fn current_streak(active: &[bool], through: i64) -> u32 {
+    if active.is_empty() || through < 0 {
+        return 0;
+    }
+    let mut week = through.min(active.len() as i64 - 1);
+    if !active[week as usize] {
+        week -= 1;
+    }
+    let mut streak = 0;
+    while week >= 0 && active[week as usize] {
+        streak += 1;
+        week -= 1;
+    }
+    streak
+}
+
+/// Longest run of consecutive active weeks anywhere in the window.
+pub fn best_streak(active: &[bool]) -> u32 {
+    let mut best = 0;
+    let mut run = 0;
+    for &week in active {
+        run = if week { run + 1 } else { 0 };
+        best = best.max(run);
+    }
+    best
+}
+
+fn score_member(
     member: &Member,
     comp: &Competition,
     cfg: &ScoringConfig,
-) -> toasty::Result<Option<Standing>> {
-    let posts = Post::filter(Post::fields().member_id().eq(member.id))
-        .exec(&mut *db)
-        .await?;
+    data: &Dataset,
+    now: i64,
+) -> Option<Standing> {
+    score_member_full(member, comp, cfg, data, now).map(|(standing, _)| standing)
+}
 
-    let profile_snaps = {
-        let mut s = ProfileSnapshot::filter(ProfileSnapshot::fields().member_id().eq(member.id))
-            .exec(&mut *db)
-            .await?;
-        s.sort_by_key(|p| p.captured_at);
-        s
-    };
+/// The scoring pass proper. Returns the standing and the ledger that explains it, computed
+/// together so the two can never disagree.
+fn score_member_full(
+    member: &Member,
+    comp: &Competition,
+    cfg: &ScoringConfig,
+    data: &Dataset,
+    now: i64,
+) -> Option<(Standing, Ledger)> {
+    let posts = data.posts(member.id);
+    let profile_snaps = data.profile(member.id);
 
     // Skip members with no collected data at all (e.g. an admin who never linked the extension).
     if posts.is_empty() && profile_snaps.is_empty() {
-        return Ok(None);
+        return None;
     }
 
-    // --- Post points: score each in-window post from its latest snapshot ---------------------
-    struct ScoredPost {
-        week: i64,
-        points: f64,
-    }
-    let mut scored = Vec::new();
+    // --- Per-post engagement, bucketed by scoring week --------------------------------------
+    let weeks = ScoringConfig::weeks_in(comp.start_at, comp.end_at) as usize;
+    let mut by_week: Vec<Vec<LedgerPost>> = vec![Vec::new(); weeks];
     let mut total_posts_in_window = 0usize;
 
-    for post in &posts {
-        // Effective time: the post's own creation time, or its first snapshot if unknown.
-        let effective = if post.created_at > 0 {
-            post.created_at
-        } else {
-            match earliest_post_snapshot(db, post.id).await? {
-                Some(ts) => ts,
-                None => continue,
-            }
-        };
+    for post in posts {
+        let Some(effective) = data.posted_at(post) else { continue };
         if effective < comp.start_at || effective > comp.end_at {
             continue;
         }
         total_posts_in_window += 1;
+        let week = ((effective - comp.start_at) / WEEK_SECONDS) as usize;
 
-        let Some(snap) = latest_post_snapshot_before(db, post.id, comp.end_at).await? else {
-            continue;
+        // A post with no snapshot yet still "shows up"; it just has no engagement to price.
+        let snap = data.latest_snapshot_before(post.id, comp.end_at);
+        // Comments score from the rows we actually read, excluding the author's own — replying
+        // to your own thread shouldn't earn points. When we have no rows at all (nothing read
+        // yet), fall back to LinkedIn's total rather than scoring the post as if it had none.
+        let comments_total = snap.and_then(|s| s.comments).unwrap_or(0);
+        let comments = data.scored_comments(post.id, comments_total);
+        let e = Engagement {
+            reactions: snap.and_then(|s| s.reactions).unwrap_or(0),
+            comments,
+            reposts: snap.and_then(|s| s.reposts).unwrap_or(0),
+            sends: snap.and_then(|s| s.sends).unwrap_or(0),
+            saves: snap.and_then(|s| s.saves).unwrap_or(0),
+            impressions: snap.and_then(|s| s.impressions).unwrap_or(0),
         };
-        // Comments score from the rows we actually read, excluding the author's own — replying to
-        // your own thread shouldn't earn points. When we have no rows at all (nothing read yet),
-        // fall back to LinkedIn's total rather than scoring the post as if it had no comments.
-        let scored_comments = match comments_by_others(db, post.id).await? {
-            Some(n) => n,
-            None => f(snap.comments),
-        };
-
-        let points = f(snap.reactions) * cfg.per_reaction
-            + scored_comments * cfg.per_comment
-            + f(snap.reposts) * cfg.per_repost
-            + f(snap.sends) * cfg.per_send
-            + f(snap.saves) * cfg.per_save
-            + f(snap.impressions) * cfg.per_impression;
-
-        let week = (effective - comp.start_at) / WEEK_SECONDS;
-        scored.push(ScoredPost { week, points });
-    }
-
-    // Keep only the top `max_posts_per_week` posts within each week bucket.
-    let mut by_week: std::collections::HashMap<i64, Vec<f64>> = std::collections::HashMap::new();
-    for sp in &scored {
-        by_week.entry(sp.week).or_default().push(sp.points);
-    }
-    let mut post_points = 0.0;
-    let mut graded_posts = 0usize;
-    for (_week, mut pts) in by_week {
-        pts.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-        let take = (cfg.max_posts_per_week as usize).min(pts.len());
-        post_points += pts[..take].iter().sum::<f64>();
-        graded_posts += take;
+        by_week[week.min(weeks - 1)].push(LedgerPost {
+            post_id: post.id,
+            permalink: post.permalink.clone(),
+            text_preview: post.text_preview.clone(),
+            posted_at: effective,
+            is_repost: post.is_repost,
+            reactions: e.reactions,
+            comments: e.comments,
+            comments_total,
+            reposts: e.reposts,
+            sends: e.sends,
+            saves: e.saves,
+            impressions: e.impressions,
+            raw_engagement: cfg.raw_engagement(&e),
+            capped_engagement: cfg.post_engagement(&e),
+            scaled_engagement: 0.0,
+            show_up_points: 0.0,
+            counted: false,
+            no_data: snap.is_none(),
+        });
     }
 
     // --- Follower count + normalization -----------------------------------------------------
@@ -244,37 +601,128 @@ async fn score_member(
         .filter(|p| p.captured_at >= comp.start_at && p.captured_at <= comp.end_at)
         .collect();
 
-    let latest_followers = in_window
+    let known_followers = in_window
         .iter()
         .rev()
         .find_map(|p| p.follower_count)
-        .or_else(|| profile_snaps.iter().rev().find_map(|p| p.follower_count))
-        .unwrap_or(0);
+        .or_else(|| profile_snaps.iter().rev().find_map(|p| p.follower_count));
+    let latest_followers = known_followers.unwrap_or(0);
+    let factor = cfg.follower_factor(latest_followers);
 
-    if cfg.normalize_by_followers && latest_followers > 0 {
-        let factor = cfg.follower_baseline as f64 / latest_followers as f64;
-        post_points *= factor;
+    // --- Show up + engagement: only the best `max_posts_per_week` posts a week count ---------
+    let max = cfg.max_posts_per_week as usize;
+    let mut show_up = 0.0;
+    let mut engagement = 0.0;
+    let mut graded_posts = 0usize;
+    let mut active: Vec<bool> = vec![false; weeks];
+    let mut unscaled_engagement = 0.0;
+    let mut week_show_up = vec![0.0; weeks];
+    let mut week_engagement = vec![0.0; weeks];
+    for (week, posts) in by_week.iter_mut().enumerate() {
+        if posts.is_empty() {
+            continue;
+        }
+        active[week] = true;
+        // Best posts first, so the ones that count are the top of the list.
+        posts.sort_by(|a, b| {
+            b.capped_engagement
+                .partial_cmp(&a.capped_engagement)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.posted_at.cmp(&b.posted_at))
+        });
+        let take = max.min(posts.len());
+        for (i, post) in posts.iter_mut().enumerate() {
+            post.counted = i < take;
+            if post.counted {
+                post.show_up_points = cfg.per_post;
+                post.scaled_engagement = post.capped_engagement * factor;
+                unscaled_engagement += post.capped_engagement;
+            }
+        }
+        week_show_up[week] = take as f64 * cfg.per_post;
+        week_engagement[week] = posts.iter().map(|p| p.scaled_engagement).sum();
+        show_up += week_show_up[week];
+        engagement += week_engagement[week];
+        graded_posts += take;
     }
 
+    // --- Keep showing up: active weeks and the streak bonus ---------------------------------
+    let this_week = current_week(comp, now);
+    let active_weeks = active.iter().filter(|w| **w).count() as u32;
+    let streak = current_streak(&active, this_week);
+    let best = best_streak(&active);
+    let streak_bonus = cfg.streak_bonus(best);
+    let consistency = active_weeks as f64 * cfg.per_active_week + streak_bonus;
+
+    let week_index = this_week as usize;
+    let week_points = week_show_up[week_index]
+        + week_engagement[week_index]
+        + if active[week_index] { cfg.per_active_week } else { 0.0 };
+
     // --- Profile points: followers gained + profile views accrued in-window ------------------
-    let follower_gained = window_delta(&in_window, |p| p.follower_count);
+    let follower_growth = window_delta(&in_window, |p| p.follower_count);
     let profile_views_gained = window_delta(&in_window, |p| p.profile_views);
-    let profile_points = follower_gained.max(0) as f64 * cfg.per_follower_gained
+    let profile_points = follower_growth.max(0) as f64 * cfg.per_follower_gained
         + profile_views_gained.max(0) as f64 * cfg.per_profile_view;
 
-    let total = post_points + profile_points;
+    let post_points = show_up + engagement;
+    let total = post_points + consistency + profile_points;
 
-    Ok(Some(Standing {
+    let ledger = Ledger {
+        weeks: by_week
+            .into_iter()
+            .enumerate()
+            .map(|(i, posts)| {
+                let start_at = comp.start_at + i as i64 * WEEK_SECONDS;
+                let active_week_points = if active[i] { cfg.per_active_week } else { 0.0 };
+                LedgerWeek {
+                    week: i as i64 + 1,
+                    start_at,
+                    end_at: (start_at + WEEK_SECONDS - 1).min(comp.end_at),
+                    active: active[i],
+                    posts,
+                    show_up_points: week_show_up[i],
+                    active_week_points,
+                    engagement_points: week_engagement[i],
+                    total: week_show_up[i] + active_week_points + week_engagement[i],
+                }
+            })
+            .collect(),
+        follower_count: latest_followers,
+        followers_unknown: known_followers.is_none(),
+        follower_factor: factor,
+        show_up_points: show_up,
+        active_weeks,
+        active_week_points: active_weeks as f64 * cfg.per_active_week,
+        best_streak_weeks: best,
+        streak_bonus,
+        consistency_points: consistency,
+        engagement_points: engagement,
+        unscaled_engagement_points: unscaled_engagement,
+        profile_points,
+        total,
+    };
+
+    let standing = Standing {
         member_id: member.id,
         display_name: member.display_name.clone(),
         profile_url: member.profile_url.clone(),
         follower_count: latest_followers,
+        follower_growth,
+        show_up_points: show_up,
+        consistency_points: consistency,
+        engagement_points: engagement,
         post_points,
         profile_points,
         total,
+        week_points,
         graded_posts,
         total_posts: total_posts_in_window,
-    }))
+        active_weeks,
+        streak_weeks: streak,
+        best_streak_weeks: best,
+    };
+    Some((standing, ledger))
 }
 
 /// Latest value minus earliest value across the window snapshots, for a chosen metric.
@@ -287,38 +735,65 @@ fn window_delta(snaps: &[&ProfileSnapshot], pick: impl Fn(&ProfileSnapshot) -> O
     }
 }
 
-async fn earliest_post_snapshot(db: &mut Db, post_id: i64) -> toasty::Result<Option<i64>> {
-    let mut snaps = PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post_id))
-        .exec(&mut *db)
-        .await?;
-    snaps.sort_by_key(|s| s.captured_at);
-    Ok(snaps.first().map(|s| s.captured_at))
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-async fn latest_post_snapshot_before(
-    db: &mut Db,
-    post_id: i64,
-    before: i64,
-) -> toasty::Result<Option<PostSnapshot>> {
-    let mut snaps = PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post_id))
-        .exec(&mut *db)
-        .await?;
-    snaps.retain(|s| s.captured_at <= before);
-    snaps.sort_by_key(|s| s.captured_at);
-    Ok(snaps.pop())
-}
-
-/// Comments by anyone other than the post's author, or None when we have read no comments for it.
-async fn comments_by_others(db: &mut Db, post_id: i64) -> toasty::Result<Option<f64>> {
-    let rows = PostComment::filter(PostComment::fields().post_id().eq(post_id))
-        .exec(&mut *db)
-        .await?;
-    if rows.is_empty() {
-        return Ok(None);
+    #[test]
+    fn engagement_counts_fully_to_the_cap_then_at_half_rate() {
+        let cfg = ScoringConfig::default();
+        // 20 comments × 5 + 100 reactions × 0.2 = 120 → under the cap, counts fully.
+        let small = Engagement { comments: 20, reactions: 100, ..Default::default() };
+        assert!((cfg.post_engagement(&small) - 120.0).abs() < 1e-9);
+        // 40 comments × 5 + 250 reactions × 0.2 = 250 → 150 + 100 × 0.5 = 200.
+        let big = Engagement { comments: 40, reactions: 250, ..Default::default() };
+        assert!((cfg.post_engagement(&big) - 200.0).abs() < 1e-9);
     }
-    Ok(Some(rows.iter().filter(|c| !c.is_self).count() as f64))
-}
 
-fn f(v: Option<i64>) -> f64 {
-    v.unwrap_or(0) as f64
+    #[test]
+    fn streak_bonus_is_the_larger_of_the_two_not_their_sum() {
+        let cfg = ScoringConfig::default();
+        assert_eq!(cfg.streak_bonus(3), 0.0);
+        assert_eq!(cfg.streak_bonus(4), 25.0);
+        assert_eq!(cfg.streak_bonus(7), 25.0);
+        assert_eq!(cfg.streak_bonus(8), 75.0);
+    }
+
+    #[test]
+    fn streaks_count_consecutive_active_weeks() {
+        let active = [true, true, false, true, true, true, false, false];
+        assert_eq!(best_streak(&active), 3);
+        // Through week 5 (active): the run is weeks 3–5.
+        assert_eq!(current_streak(&active, 5), 3);
+        // Through week 6 (quiet so far): still the run ending at week 5.
+        assert_eq!(current_streak(&active, 6), 3);
+        // Through week 7: week 6 was quiet too, so the streak is broken.
+        assert_eq!(current_streak(&active, 7), 0);
+    }
+
+    #[test]
+    fn scored_comments_is_linkedin_total_minus_the_authors_own() {
+        use crate::models::PostComment;
+        let mut data = Dataset::default();
+        let row = |urn: &str, is_self: bool| PostComment {
+            id: 0, post_id: 7, urn: urn.into(), commenter_urn: "urn:li:publicIdentifier:x".into(),
+            commenter_name: None, is_self, is_reply: false, created_at: 0, captured_at: 0,
+            post: Default::default(),
+        };
+        // Nothing read: the total stands.
+        assert_eq!(data.scored_comments(7, 12), 12);
+        // Page showed 3 of 12 comments, one by the author: 12 − 1.
+        data.comments_by_post.insert(7, vec![row("a", false), row("b", true), row("c", false)]);
+        assert_eq!(data.scored_comments(7, 12), 11);
+        // A stale total below what we saw never under-counts what we saw.
+        assert_eq!(data.scored_comments(7, 1), 2);
+    }
+
+    #[test]
+    fn weeks_in_window_include_the_partial_last_week() {
+        // Jul 13 → Sep 30 is 79 days: eleven full weeks and a partial twelfth.
+        let start = crate::util::parse_date("2026-07-13").unwrap();
+        let end = crate::util::parse_date("2026-09-30").unwrap() + 86_399;
+        assert_eq!(ScoringConfig::weeks_in(start, end), 12);
+    }
 }

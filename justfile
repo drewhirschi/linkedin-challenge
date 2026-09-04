@@ -20,6 +20,14 @@ doctor:
 dev:
     cd server && DATABASE_URL=turso:linkedin.db cargo dev
 
+# Release only: a debug build would seed the local test account into production. Startup applies
+# the additive schema migrations, exactly as a deploy would.
+# Run a release build locally against the PRODUCTION database (credentials from server/.env.local).
+run-prod:
+    cd server && test -f .env.local || { echo "missing server/.env.local (run: vercel env pull .env.local)" >&2; exit 1; }
+    cd server && cargo build --release --bin linkedin-challenge-server
+    cd server && set -a && . ./.env.local && set +a && DATABASE_URL="$DATABASE_URL_UNPOOLED" PORT=3312 ./target/release/linkedin-challenge-server
+
 # Ensure the local account and Q3 World Cup challenge exist without resetting synced data.
 seed-local:
     cd server && DATABASE_URL=turso:linkedin.db cargo run --bin seed-local
@@ -71,7 +79,14 @@ check:
     node --check extension/sync.js
     bash -n extension/build.sh
     server/scripts/test-auth-e2e.sh
+    node scripts/test-extension-e2e.mjs
     git diff --check
+
+# Drive the extension's LinkedIn collectors in headless Chromium on the signed-in dev profile
+# (.chromium-dev-profile) and assert the follower count, posts, and comments come back right.
+# Set EXPECTED_FOLLOWERS=<n> to also assert the count within 15%.
+test-extension-e2e: extension-dev
+    node scripts/test-extension-e2e.mjs
 
 # Exercise password auth against a real server and isolated temporary database.
 test-auth-e2e:

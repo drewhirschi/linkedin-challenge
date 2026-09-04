@@ -5,6 +5,7 @@ use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use linkedin_challenge_server::auth::{
     account_validation_error, establish_session, hash_password, member_by_email,
 };
+use linkedin_challenge_server::enroll::enroll_in_running_challenges;
 use linkedin_challenge_server::models::{Member, Org};
 use linkedin_challenge_server::util::{new_bearer_token, now_unix};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
@@ -80,6 +81,9 @@ pub async fn post(
     })
     .exec(&mut db)
     .await?;
+
+    // Everyone competes in whatever is running: a new account lands on the board immediately.
+    enroll_in_running_challenges(&mut db, member.id).await?;
 
     let cookie = establish_session(&mut db, member.id).await?;
     let mut headers = HeaderMap::new();

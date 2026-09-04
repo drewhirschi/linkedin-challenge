@@ -1,7 +1,7 @@
 // MV3 service worker: schedules periodic scrapes, runs them, and answers popup messages.
-import { SYNC_PERIOD_MINUTES, SYNC_JITTER_MINUTES, MIN_SYNC_INTERVAL_MINUTES } from "./config.js";
+import { SYNC_CHECK_MINUTES, SYNC_JITTER_MINUTES, MIN_SYNC_INTERVAL_MINUTES } from "./config.js";
 import { getState, setState, isLinked } from "./storage.js";
-import { collectSnapshot, getMe, diagnose, isLinkedInSignedIn } from "./linkedin.js";
+import { collectSnapshot, getMe, getPostFeed, getPostComments, getFollowerCount, diagnose, isLinkedInSignedIn } from "./linkedin.js";
 import { isAppSignedIn, linkIdentityToAccount, pushSnapshot, signInFromSession } from "./sync.js";
 import { SERVER_URL, LINKEDIN_ORIGIN } from "./config.js";
 
@@ -10,16 +10,16 @@ const ALARM = "challenge-sync";
 // Convenience for the *service worker* console (chrome://extensions -> "service worker"), where
 // `chrome.runtime` exists but module bindings don't: `await diagnose()`.
 globalThis.diagnose = diagnose;
+// The collectors, for the e2e check (scripts/test-extension-e2e.mjs), which drives this worker
+// over DevTools — a service worker can't dynamic-import, so they must be reachable by name.
+globalThis.collectors = { getMe, getPostFeed, getPostComments, getFollowerCount, collectSnapshot };
 
-// (Re)arm the periodic alarm with a little jitter so installs don't sync in lockstep.
+// Arm the check alarm. It fires every SYNC_CHECK_MINUTES; runSync() decides whether enough time
+// has passed. The first check comes a minute after install or browser start, so a laptop that
+// has been closed for two days syncs as soon as it is back rather than at the next clock mark.
 async function scheduleSync() {
-  const jitter = (Math.random() * 2 - 1) * SYNC_JITTER_MINUTES; // +/- jitter
-  const periodInMinutes = Math.max(30, SYNC_PERIOD_MINUTES);
   await chrome.alarms.clear(ALARM);
-  chrome.alarms.create(ALARM, {
-    delayInMinutes: Math.max(1, periodInMinutes + jitter),
-    periodInMinutes,
-  });
+  chrome.alarms.create(ALARM, { delayInMinutes: 1, periodInMinutes: SYNC_CHECK_MINUTES });
 }
 
 chrome.runtime.onInstalled.addListener(scheduleSync);
@@ -31,10 +31,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 /** Milliseconds until the next AUTOMATIC sync is due; 0 when it's due now. */
 export async function msUntilSyncAllowed() {
-  const { lastSyncAt } = await getState();
+  const { lastSyncAt, syncJitterMinutes } = await getState();
   if (!lastSyncAt) return 0;
+  // A per-install offset, fixed at first sync, so a fleet of laptops spreads its syncs out.
+  const jitter = typeof syncJitterMinutes === "number" ? syncJitterMinutes : 0;
   const elapsed = Date.now() - new Date(lastSyncAt).getTime();
-  return Math.max(0, MIN_SYNC_INTERVAL_MINUTES * 60_000 - elapsed);
+  return Math.max(0, (MIN_SYNC_INTERVAL_MINUTES + jitter) * 60_000 - elapsed);
 }
 
 // The core scrape+upload cycle. Records status/errors for the popup either way.
@@ -60,10 +62,15 @@ async function runSync({ manual = false } = {}) {
       postFeedComplete: snap.postFeedComplete,
     };
     const result = await pushSnapshot(payload);
+    const { syncJitterMinutes } = await getState();
     await setState({
       lastSyncAt: new Date().toISOString(),
       lastError: null,
       lastPostsIngested: result.postsIngested ?? snap.posts.length,
+      syncJitterMinutes:
+        typeof syncJitterMinutes === "number"
+          ? syncJitterMinutes
+          : Math.round(Math.random() * SYNC_JITTER_MINUTES),
     });
     return { ok: true, postsIngested: result.postsIngested ?? snap.posts.length };
   } catch (err) {

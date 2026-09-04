@@ -19,6 +19,16 @@ async fn main() {
 
     let db = models::connect().await;
 
+    // Everyone competes in whatever is running. Backfill accounts that predate auto-enrollment.
+    {
+        let mut enroll_db = db.clone();
+        match linkedin_challenge_server::enroll::enroll_everyone(&mut enroll_db).await {
+            Ok(0) => {}
+            Ok(added) => println!("auto-enrolled {added} membership(s) in running challenges"),
+            Err(error) => eprintln!("auto-enrollment failed: {error}"),
+        }
+    }
+
     // Development should always have one known way in, whether started through `just dev`,
     // `cargo dev`, or `cargo run`. Release builds never seed it unless explicitly requested.
     if cfg!(debug_assertions) || std::env::var("SEED_LOCAL").is_ok() {

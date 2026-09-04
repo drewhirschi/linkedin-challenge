@@ -3,6 +3,7 @@
 use axum::{Extension, Json};
 use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use linkedin_challenge_server::auth::{establish_session, member_by_email, verify_password};
+use linkedin_challenge_server::enroll::enroll_in_running_challenges;
 use linkedin_challenge_server::web::{ApiError, ApiResult};
 use serde::{Deserialize, Serialize};
 use toasty::Db;
@@ -48,6 +49,9 @@ pub async fn post(
     if !ok {
         return Err(ApiError::unauthorized("invalid email or password"));
     }
+
+    // Accounts created before a challenge started join it the next time they sign in.
+    enroll_in_running_challenges(&mut db, member.id).await?;
 
     let org_slug = linkedin_challenge_server::dto::org_slug(&mut db, member.org_id).await?;
     let cookie = establish_session(&mut db, member.id).await?;

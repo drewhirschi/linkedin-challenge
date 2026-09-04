@@ -8,7 +8,7 @@ Build with:
 just extension-release https://linkedin-challenge-ruby.vercel.app
 ```
 
-Upload `extension/dist/challenge-sync-0.1.0.zip`.
+Upload `extension/dist/challenge-sync-0.1.1.zip`.
 
 Production homepage: <https://linkedin-challenge-ruby.vercel.app>
 

@@ -72,6 +72,7 @@ function Sidebar() {
   const logout = useLogout();
   const stopImpersonation = useStopImpersonation();
   const challenges = challengeData?.status === 200 ? challengeData.data.challenges : [];
+  const organiser = challenges.some((challenge) => challenge.isOwner);
 
   if (!me?.signedIn) return null;
 
@@ -89,8 +90,14 @@ function Sidebar() {
               <SideLink href="/me" pathname={pathname}>My posts</SideLink>
               <div className="nav-section">Challenges</div>
               <SideLink href="/challenges" pathname={pathname}>All challenges</SideLink>
-              <SideLink href="/challenges/mine" pathname={pathname}>My challenges</SideLink>
-              <SideLink href="/challenges/new" pathname={pathname}>Create a challenge</SideLink>
+              {/* Organiser tools stay out of participants' way: only someone who already runs a
+                  challenge, or the product operator, gets the overview and the create link. */}
+              {(organiser || me.isSystemAdmin) && (
+                <>
+                  <SideLink href="/challenges/mine" pathname={pathname}>My challenges</SideLink>
+                  <SideLink href="/challenges/new" pathname={pathname}>Create a challenge</SideLink>
+                </>
+              )}
               {challenges.some((challenge) => challenge.isFavorite) && (
                 <div className="nav-subsection">Favorites</div>
               )}
@@ -103,9 +110,12 @@ function Sidebar() {
                     {open && (
                       <>
                         <SideLink href={base} pathname={pathname} nested>Leaderboard</SideLink>
-                        <SideLink href={`${base}/scoring`} pathname={pathname} nested>How scoring works</SideLink>
+                        <SideLink href={`${base}/scoring`} pathname={pathname} nested>Scoring</SideLink>
                         {challenge.isOwner && (
-                          <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>
+                          <>
+                            <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>
+                            <SideLink href={`${base}/settings`} pathname={pathname} nested>Settings</SideLink>
+                          </>
                         )}
                       </>
                     )}
@@ -172,7 +182,9 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <>
       <title>Challenge — LinkedIn leaderboard</title>
-      <link rel="stylesheet" href="/style.css" />
+      {/* No manual stylesheet link: the bundler injects a content-hashed copy of public/style.css,
+          and an unhashed /style.css link loaded after it would let a browser's cached copy override
+          every CSS change until the cache expired. */}
       <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       <link rel="icon" href="/favicon.ico" sizes="32x32" />
       <NuqsAdapter>

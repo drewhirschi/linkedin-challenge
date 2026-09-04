@@ -63,11 +63,33 @@ Content-Type: application/json
         "reactions": 45,
         "comments": 12,
         "reposts": 3
-      }
+      },
+      "comments": [                 // who commented; [] means "didn't read them", not "none"
+        {
+          "urn": "urn:li:comment:(urn:li:activity:7231000000000000000,7231000000000000001)",
+          "commenterUrn": "urn:li:fsd_profile:ACoAAB...",
+          "commenterName": "Sam Example",
+          "createdAt": "2026-08-02T10:00:00Z",
+          "isReply": false          // true inside a thread (a reply to a comment)
+        }
+      ]
     }
   ]
 }
 ```
+
+Comments are read from the server-rendered post page (`/feed/update/urn:li:activity:{id}/`) —
+every Voyager comments endpoint answers 400/404 now. Each rendered comment carries its URN, the
+commenter's profile link, and a label naming them, so `commenterUrn` is a
+`urn:li:publicIdentifier:…` and `createdAt` is null. The page renders only the first several
+comments, so the list is a sample, never a count. The server stores each comment once by URN and
+marks `isSelf` when the commenter matches the post's author by URN id or public identifier.
+Scoring uses LinkedIn's `metrics.comments` total minus the author's own comments seen.
+
+The follower count comes from `GET /voyager/api/feed/dash/followingStates?ids=List(urn:li:fsd_followingState:urn:li:fsd_profile:{id})`,
+keyed by the member's own profile id. The post feed's `FollowingInfo` entities belong to *other*
+actors on the page and must never be used for it. `just test-extension-e2e` proves both against
+a live session.
 
 Response `200`:
 
@@ -98,7 +120,6 @@ than plausible-looking ones:
 | Post impressions (all posts) | 19,833 | Analytics |
 | Search appearances | 53 | Analytics |
 
-Followers and profile views are **not currently collected** — the Voyager REST endpoints that used
-to expose them (`networkinfo`, `profileView`, `wvmpCards`, `feed/dash/followingStates`) now answer
-410 or 400, and a recursive search of the profile responses finds no follower-shaped number at any
-depth. They will need either GraphQL or a DOM read of the analytics page.
+Followers are collected from `feed/dash/followingStates` keyed by the `fsd_followingState` URN
+(the bare `fsd_profile` form answers 400, which is why this was once thought dead). Profile views
+are **not currently collected**: `networkinfo`, `profileView`, and `wvmpCards` answer 410.

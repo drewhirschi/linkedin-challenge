@@ -89,20 +89,23 @@ export async function getMe() {
 
 // ---- profile metrics ------------------------------------------------------
 
-// Follower count via the network-info surface. Falls back to null.
-export async function getFollowerCount(publicIdentifier) {
-  if (!publicIdentifier) return null;
+// The member's own follower count, from the dash following-state keyed by their profile id.
+//
+// This is the one surface that still answers for it: `networkinfo` is gone (410), the profile
+// top card carries no count, and the post feed only includes FollowingInfo for *other* actors on
+// the page — which is how three people once synced a company page's 3,553 as their own. The id
+// after the last colon of the member URN is the same id `fsd_profile` uses.
+export async function getFollowerCount(memberUrn) {
+  const id = urnTail(memberUrn);
+  if (!id) return null;
   try {
-    const json = await voyagerFetch(
-      `/identity/profiles/${encodeURIComponent(publicIdentifier)}/networkinfo`
-    );
-    const info =
-      (json.data && (json.data.followersCount ?? json.data.followerCount) != null
-        ? json.data
-        : firstWith(json, (e) => e && (e.followersCount != null || e.followerCount != null))) ||
-      {};
-    const count = info.followersCount ?? info.followerCount;
-    return typeof count === "number" ? count : null;
+    const key = `urn:li:fsd_followingState:urn:li:fsd_profile:${id}`;
+    const json = await voyagerFetch(`/feed/dash/followingStates?ids=List(${encodeURIComponent(key)})`);
+    const state =
+      json?.data?.results?.[key] ||
+      firstWith(json, (e) => e && String(e.entityUrn || "") === key && typeof e.followerCount === "number") ||
+      firstWith(json, (e) => e && typeof e.followerCount === "number");
+    return typeof state?.followerCount === "number" ? state.followerCount : null;
   } catch {
     return null;
   }
@@ -251,7 +254,7 @@ async function getPostAnalytics(activityUrn) {
 
 // Fetch posts and the follower count that LinkedIn now includes alongside them. Keeping these in
 // one request avoids the retired `networkinfo` endpoint and matches the live response diagnostics.
-async function getPostFeed(memberUrn) {
+export async function getPostFeed(memberUrn) {
   if (!memberUrn) return { posts: [], followerCount: null, excludedPostUrns: [], postFeedComplete: false };
   let json;
   try {
@@ -263,10 +266,11 @@ async function getPostFeed(memberUrn) {
     return { posts: [], followerCount: null, excludedPostUrns: [], postFeedComplete: false };
   }
 
-  const following = firstWith(
-    json,
-    (e) => e && (e.$type || "").endsWith("FollowingInfo") && typeof e.followerCount === "number",
-  );
+  // The member's OWN follower count. The feed response carries a FollowingInfo entity for every
+  // actor on the page — reshared authors, company pages, the lot — so taking the first one
+  // recorded a colleague's 3,500 or a company's 288,000 as the member's own. Match the entity
+  // whose URN names this member; report null rather than guess when it isn't there.
+  const following = ownFollowingInfo(json, memberUrn);
 
   // Updates carry commentary + a socialDetail with reaction/comment/share counts.
   const rootUpdates = new Set(json.data?.["*elements"] || []);
@@ -291,7 +295,7 @@ async function getPostFeed(memberUrn) {
       excludedPostUrns.push(nestedReshareUrn);
     }
 
-    const social = resolveSocialDetail(json, activityUrn);
+    const social = resolveSocialDetail(json, activityUrn, u);
     posts.push({
       urn: activityUrn,
       permalink: `${LINKEDIN_ORIGIN}/feed/update/${activityUrn}/`,
@@ -314,6 +318,11 @@ async function getPostFeed(memberUrn) {
   return {
     posts: dedupeByUrn(posts),
     followerCount: following?.followerCount ?? null,
+    // Every follower count on the page, for diagnostics and the e2e check: proves the one above
+    // was chosen by identity rather than by position.
+    allFollowerCounts: included(json)
+      .filter((e) => e && /Following(Info|State)$/.test(String(e.$type || "")) && typeof e.followerCount === "number")
+      .map((e) => e.followerCount),
     excludedPostUrns: [...new Set(excludedPostUrns)],
     // Only an under-full first page is authoritative for deletion. At exactly MAX_POSTS, an absent
     // stored post may simply have fallen onto page two rather than having been deleted.
@@ -321,11 +330,105 @@ async function getPostFeed(memberUrn) {
   };
 }
 
+// The FollowingInfo entity that belongs to `memberUrn`, or null.
+//
+// Identity URNs come in several spellings (`fs_miniProfile`, `fsd_profile`, `member`), but the
+// id after the last colon is the same in all of them, and a FollowingInfo's entityUrn embeds it:
+// `urn:li:fs_followingInfo:urn:li:fsd_profile:ACoAA...`. Company pages embed `urn:li:company:…`
+// instead, so they can never match a member.
+export function ownFollowingInfo(json, memberUrn) {
+  const id = urnTail(memberUrn);
+  if (!id) return null;
+  const isFollowing = (e) =>
+    e &&
+    /Following(Info|State)$/.test(String(e.$type || "")) &&
+    typeof e.followerCount === "number";
+  return (
+    included(json).find(
+      (e) =>
+        isFollowing(e) &&
+        [e.entityUrn, e.followee, e["*followee"], e.dashFollowingStateUrn]
+          .filter((v) => typeof v === "string")
+          .some((v) => v.includes(id)),
+    ) || null
+  );
+}
+
 // NOTE: there used to be a GraphQL "author analytics" call here to fetch impressions, guarded by
 // scraping a rotating queryId out of the feed HTML. It never worked (the queryId regex found
 // nothing, so it returned null every time) and it cost one extra request plus a polite delay per
 // post. `numImpressions` on SocialActivityCounts supplies the same number in the response we
 // already fetch, so the whole path is gone.
+
+// ---- comments -------------------------------------------------------------
+
+// Who commented on a post.
+//
+// Voyager's comment endpoints (`/feed/comments`, `/feed/dash/comments`, the GraphQL surface) all
+// answer 400/404 for the current site, so this reads the server-rendered post page instead — the
+// same approach the analytics collector uses. Each comment is rendered as a component whose id
+// carries the comment URN, and the block under it carries the commenter's profile link and an
+// aria-label naming them. We report the commenter as a public-identifier URN (the page exposes no
+// member URN), which the server matches against the account's own identifier.
+//
+// The page renders only the first several comments, so the server treats this list as "comments
+// we saw", never as the total: LinkedIn's count on the post still governs, minus the author's own
+// comments seen here. Best-effort like the other collectors: any failure returns an empty list.
+export async function getPostComments(activityUrn, { max = 100 } = {}) {
+  const id = activityId(activityUrn);
+  if (!id) return [];
+  try {
+    const res = await linkedinFetch(`/feed/update/urn:li:activity:${id}/`);
+    return parseRenderedComments(await res.text(), max);
+  } catch {
+    return [];
+  }
+}
+
+const COMMENT_ID = /id="replaceableComment_(urn:li:comment:\([^)"]*\))"/g;
+
+export function parseRenderedComments(html, max = 100) {
+  const anchors = [...html.matchAll(COMMENT_ID)];
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; i < anchors.length && out.length < max; i++) {
+    const urn = anchors[i][1];
+    if (seen.has(urn)) continue;
+    seen.add(urn);
+    // The block for this comment runs until the next comment component starts.
+    const from = anchors[i].index;
+    const to = i + 1 < anchors.length ? anchors[i + 1].index : Math.min(html.length, from + 20_000);
+    const block = html.slice(from, to);
+    const publicIdentifier = block.match(/href="https:\/\/www\.linkedin\.com\/in\/([^/"?#]+)/)?.[1] || null;
+    if (!publicIdentifier) continue;
+    const name =
+      block.match(/aria-label="View more options for (.+?)(?:['’]s|['’]) comment\./)?.[1] || null;
+    out.push({
+      urn,
+      commenterUrn: `urn:li:publicIdentifier:${decodeURIComponent(publicIdentifier)}`,
+      commenterName: name ? decodeEntities(name) : null,
+      createdAt: null, // the page shows "1w", not a timestamp
+      isReply: false,
+    });
+  }
+  return out;
+}
+
+function decodeEntities(text) {
+  return String(text)
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+// A member's own identity can surface under several URN schemes (`fs_miniProfile`, `fsd_profile`,
+// `member`); the stable part is the trailing id. Comparing on that keeps "is this my own
+// comment?" correct whichever shape a given response uses.
+export function urnTail(urn) {
+  return String(urn || "").split(":").pop() || "";
+}
 
 // ---- parsing helpers ------------------------------------------------------
 
@@ -401,14 +504,28 @@ function extractCreatedAt(update, activityUrn) {
 // We match by activity URN rather than by chasing the reference key, because the entity URN embeds
 // the activity id — `urn:li:fs_socialActivityCounts:urn:li:activity:123` — and that survives
 // LinkedIn renaming the reference field.
-function resolveSocialDetail(json, activityUrn) {
+//
+// Some posts key their counts by a different URN (a ugcPost or share id) so the activity-URN
+// match finds nothing; for those, follow the update's own `*socialDetail` reference to its
+// SocialDetail and that entity's `*totalSocialActivityCounts` reference. Either route lands on
+// the same entity; the reference is tried first, the URN match is the fallback.
+function resolveSocialDetail(json, activityUrn, update) {
   const isCounts = (e) =>
     (e?.$type || "").endsWith("SocialActivityCounts") ||
     e?.numLikes != null ||
     e?.numImpressions != null;
+  const byUrn = (urn) => (urn ? included(json).find((e) => e && e.entityUrn === urn) : null);
 
+  const detailUrn = update?.["*socialDetail"] || update?.socialDetail?.entityUrn || null;
+  const detail = byUrn(detailUrn);
+  const referenced = byUrn(detail?.["*totalSocialActivityCounts"]);
+  // The counts entity shares the social detail's key: `fs_socialDetail:X` ↔ `fs_socialActivityCounts:X`.
+  const derived = detailUrn ? byUrn(String(detailUrn).replace("fs_socialDetail:", "fs_socialActivityCounts:")) : null;
   const counts =
-    included(json).find((e) => isCounts(e) && String(e.entityUrn || "").includes(activityUrn)) || {};
+    (referenced && isCounts(referenced) ? referenced : null) ||
+    (derived && isCounts(derived) ? derived : null) ||
+    included(json).find((e) => isCounts(e) && String(e.entityUrn || "").includes(activityUrn)) ||
+    {};
 
   return {
     reactions: numeric(counts.numLikes),
@@ -594,13 +711,27 @@ export async function collectSnapshot() {
   const profileViews = await getProfileViews();
   await sleep(REQUEST_DELAY_MS);
 
-  // Posts arrive with engagement and follower count attached — one request, not one per post.
-  const { posts, followerCount, excludedPostUrns, postFeedComplete } = await getPostFeed(me.memberUrn);
+  // The member's own follower count; the feed's own-entity match is only a fallback.
+  const ownFollowers = await getFollowerCount(me.memberUrn);
+  await sleep(REQUEST_DELAY_MS);
+
+  // Posts arrive with engagement attached — one request, not one per post.
+  const { posts, followerCount: feedFollowers, excludedPostUrns, postFeedComplete } =
+    await getPostFeed(me.memberUrn);
+  const followerCount = ownFollowers ?? feedFollowers;
 
   for (const post of posts) {
     const analytics = await getPostAnalytics(post.urn);
     post.metrics = { ...post.metrics, ...analytics };
     await sleep(REQUEST_DELAY_MS);
+    // Who commented, so the author's own replies can be left out of the score. Only worth a
+    // request when LinkedIn says there is something to read.
+    if ((post.metrics.comments ?? 0) > 0) {
+      post.comments = await getPostComments(post.urn);
+      await sleep(REQUEST_DELAY_MS);
+    } else {
+      post.comments = [];
+    }
   }
 
   return {
