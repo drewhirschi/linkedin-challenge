@@ -19,6 +19,13 @@ async fn main() {
 
     let db = models::connect().await;
 
+    // Production migrates once per deploy (`just migrate`, run by the deploy script). Development
+    // databases are throwaway and restart often, so debug builds apply the schema here instead.
+    if cfg!(debug_assertions) {
+        let mut migrate_db = db.clone();
+        models::migrate(&mut migrate_db).await;
+    }
+
     // Everyone competes in whatever is running. Backfill accounts that predate auto-enrollment.
     {
         let mut enroll_db = db.clone();

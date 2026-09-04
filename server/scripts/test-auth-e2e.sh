@@ -15,7 +15,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cargo build --bin linkedin-challenge-server
+cargo build --bin linkedin-challenge-server --bin migrate
+
+# The server never migrates in release builds; exercise the real deploy order here too.
+DATABASE_URL="turso:$test_dir/auth.db" ./target/debug/migrate >"$test_dir/migrate.log" 2>&1 || {
+  cat "$test_dir/migrate.log" >&2
+  exit 1
+}
 
 DATABASE_URL="turso:$test_dir/auth.db" PORT=0 \
   ./target/debug/linkedin-challenge-server >"$test_dir/server.log" 2>&1 &

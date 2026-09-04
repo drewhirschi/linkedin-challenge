@@ -3,30 +3,42 @@
 
 use toasty::Db;
 
-/// Connect, creating the schema on a fresh database.
-///
-/// Toasty's `push_schema()` issues plain `CREATE TABLE` — there is no create-if-missing, and the
-/// only other option (`reset_db()`) drops everything. Calling it unconditionally therefore makes
-/// the server startable exactly once per database file, so we probe first and only push when the
-/// tables aren't there.
-///
-/// It still does NOT alter existing tables: after changing a model, delete the DB file (or point
-/// `DATABASE_URL` at a fresh one) to recreate.
+/// The configured connection string (`DATABASE_URL`, defaulting to a local libsql file).
+pub fn database_url() -> String {
+    std::env::var("DATABASE_URL").unwrap_or_else(|_| "turso:linkedin.db".to_string())
+}
+
+/// Open the database. Does **not** touch the schema: run [`migrate`] (the `migrate` binary,
+/// `just migrate`) once per deploy instead. Replaying DDL on every serverless cold start added
+/// latency to each new instance, raced between concurrent instances, and turned a bad migration
+/// into a global outage instead of a failed deploy step.
 ///
 /// The handle is installed as an Axum `Extension`; handlers extract it with `Extension(db)`.
 /// Cloning `Db` is cheap (an Arc'd pool handle); Toasty statements need `&mut Db`.
 pub async fn connect() -> Db {
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "turso:linkedin.db".to_string());
-
-    let mut db = Db::builder()
+    Db::builder()
         .models(toasty::models!(crate::*))
-        .connect(&url)
+        .connect(&database_url())
         .await
-        .expect("failed to connect to the database");
+        .expect("failed to connect to the database")
+}
+
+/// Create the schema on an empty database and apply every additive migration.
+///
+/// Idempotent: each statement is create-if-missing, add-column-if-missing, or a guarded backfill,
+/// so re-running is harmless. Runs from the `migrate` binary before a deploy, and automatically in
+/// debug builds of the server so local development keeps working without a separate step.
+///
+/// Toasty's `push_schema()` issues plain `CREATE TABLE` — there is no create-if-missing, and the
+/// only other option (`reset_db()`) drops everything — so we probe first and only push when the
+/// tables aren't there. It also does NOT alter existing tables, hence the hand-written statements
+/// below for every field added since the first deploy.
+pub async fn migrate(db: &mut Db) {
+    let url = database_url();
 
     // Cheapest possible read against a table every schema version has. Success means the schema is
     // already present; failure means an empty database (or one we cannot use anyway).
-    if Org::all().first().exec(&mut db).await.is_err() {
+    if Org::all().first().exec(&mut *db).await.is_err() {
         db.push_schema()
             .await
             .expect("failed to create database schema");
@@ -36,82 +48,82 @@ pub async fn connect() -> Db {
     // migrations here so a development database and a deployed PostgreSQL database retain their
     // accounts and sync history as optional analytics fields are introduced.
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE posts ADD COLUMN is_repost BOOLEAN NOT NULL DEFAULT FALSE",
     )
     .await;
-    add_column(&mut db, "ALTER TABLE posts ADD COLUMN image_urls_json TEXT").await;
+    add_column(db, "ALTER TABLE posts ADD COLUMN image_urls_json TEXT").await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE members ADD COLUMN is_system_admin BOOLEAN NOT NULL DEFAULT FALSE",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE admin_sessions ADD COLUMN impersonator_id BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE competitions ADD COLUMN per_send DOUBLE PRECISION NOT NULL DEFAULT 0",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE competitions ADD COLUMN per_save DOUBLE PRECISION NOT NULL DEFAULT 0",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE post_snapshots ADD COLUMN sends BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE post_snapshots ADD COLUMN saves BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE post_snapshots ADD COLUMN impressions_in_network BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE post_snapshots ADD COLUMN impressions_out_of_network BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE post_snapshots ADD COLUMN members_reached BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE post_snapshots ADD COLUMN profile_viewers_from_post BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE post_snapshots ADD COLUMN followers_from_post BIGINT",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE competitions ADD COLUMN creator_id BIGINT NOT NULL DEFAULT 0",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE invites ADD COLUMN challenge_id BIGINT NOT NULL DEFAULT 0",
     )
     .await;
-    add_column(&mut db, "ALTER TABLE invites ADD COLUMN email TEXT").await;
+    add_column(db, "ALTER TABLE invites ADD COLUMN email TEXT").await;
     // Email is the login identifier for everyone, so the database enforces uniqueness too — the
     // signup-time check alone cannot rule out two concurrent registrations of one address.
     // NULL (extension-only members) is exempt from the constraint on both engines.
     execute_migration(
-        &mut db,
+        db,
         "CREATE UNIQUE INDEX IF NOT EXISTS members_email ON members (email)",
     )
     .await;
@@ -120,9 +132,9 @@ pub async fn connect() -> Db {
     } else {
         "CREATE TABLE IF NOT EXISTS challenge_memberships (id INTEGER PRIMARY KEY AUTOINCREMENT, challenge_id BIGINT NOT NULL, member_id BIGINT NOT NULL, joined_at BIGINT NOT NULL)"
     };
-    execute_migration(&mut db, membership_table).await;
+    execute_migration(db, membership_table).await;
     execute_migration(
-        &mut db,
+        db,
         "CREATE UNIQUE INDEX IF NOT EXISTS challenge_memberships_challenge_member ON challenge_memberships (challenge_id, member_id)",
     )
     .await;
@@ -131,46 +143,46 @@ pub async fn connect() -> Db {
     } else {
         "CREATE TABLE IF NOT EXISTS post_comments (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id BIGINT NOT NULL, urn TEXT NOT NULL, commenter_urn TEXT NOT NULL, commenter_name TEXT, is_self BOOLEAN NOT NULL, created_at BIGINT NOT NULL, captured_at BIGINT NOT NULL)"
     };
-    execute_migration(&mut db, post_comments_table).await;
+    execute_migration(db, post_comments_table).await;
     execute_migration(
-        &mut db,
+        db,
         "CREATE UNIQUE INDEX IF NOT EXISTS post_comments_urn ON post_comments (urn)",
     )
     .await;
     execute_migration(
-        &mut db,
+        db,
         "CREATE INDEX IF NOT EXISTS post_comments_post_id ON post_comments (post_id)",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE challenge_memberships ADD COLUMN is_favorite BOOLEAN NOT NULL DEFAULT FALSE",
     )
     .await;
     add_column(
-        &mut db,
+        db,
         "ALTER TABLE challenge_memberships ADD COLUMN role TEXT NOT NULL DEFAULT 'participant'",
     )
     .await;
     // Only rows predating challenge ownership have creator_id = 0. Backfill their former org
     // participants once; future challenges use explicit memberships and are never touched here.
     execute_migration(
-        &mut db,
+        db,
         "INSERT INTO challenge_memberships (challenge_id, member_id, joined_at) SELECT competitions.id, members.id, competitions.created_at FROM competitions JOIN members ON members.org_id = competitions.org_id WHERE competitions.creator_id = 0 AND NOT EXISTS (SELECT 1 FROM challenge_memberships existing WHERE existing.challenge_id = competitions.id AND existing.member_id = members.id)",
     )
     .await;
     execute_migration(
-        &mut db,
+        db,
         "UPDATE competitions SET creator_id = COALESCE((SELECT MIN(id) FROM members WHERE members.org_id = competitions.org_id AND members.is_admin = TRUE), 0) WHERE creator_id = 0",
     )
     .await;
     execute_migration(
-        &mut db,
+        db,
         "UPDATE challenge_memberships SET role = 'owner' WHERE member_id = (SELECT creator_id FROM competitions WHERE competitions.id = challenge_memberships.challenge_id)",
     )
     .await;
     execute_migration(
-        &mut db,
+        db,
         "UPDATE invites SET role = 'owner' WHERE role = 'admin'",
     )
     .await;
@@ -194,13 +206,13 @@ pub async fn connect() -> Db {
         "ALTER TABLE competitions ADD COLUMN participation_posts BIGINT NOT NULL DEFAULT 0",
         "ALTER TABLE post_comments ADD COLUMN is_reply BOOLEAN NOT NULL DEFAULT FALSE",
     ] {
-        add_column(&mut db, sql).await;
+        add_column(db, sql).await;
     }
     // Challenges that predate these columns have every new rate at zero, which is not a rule set
     // anyone chose — it is the absence of one. Give them the LinkedIn Cup rules once; a challenge
     // whose owner has saved settings has at least one non-zero value and is never touched.
     execute_migration(
-        &mut db,
+        db,
         "UPDATE competitions SET per_post = 10, per_active_week = 20, streak_short_weeks = 4, \
          streak_short_bonus = 25, streak_long_weeks = 8, streak_long_bonus = 75, \
          per_reaction = 0.2, per_comment = 5, per_repost = 0, per_send = 0, per_save = 0, \
@@ -214,7 +226,6 @@ pub async fn connect() -> Db {
     )
     .await;
 
-    db
 }
 
 async fn execute_migration(db: &mut Db, sql: &str) {
@@ -277,7 +288,7 @@ pub struct Member {
     /// impersonation. Granted by seed or by hand, never through any API.
     pub is_system_admin: bool,
     /// Login email (None for legacy extension-only members). Unique: checked at signup and
-    /// backed by the `members_email` index applied in [`connect`].
+    /// backed by the `members_email` index applied in [`migrate`].
     pub email: Option<String>,
     /// Argon2 password hash for admins (None for participants).
     pub password_hash: Option<String>,
