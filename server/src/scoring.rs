@@ -201,7 +201,7 @@ impl ScoringConfig {
 }
 
 /// The engagement counts scoring prices, taken from a post's latest snapshot with comments
-/// replaced by the ones other people wrote whenever we have read them.
+/// replaced by the number of distinct other people who commented whenever we have read them.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Engagement {
     pub reactions: i64,
@@ -368,15 +368,22 @@ impl Dataset {
     pub fn latest_snapshot_before(&self, post_id: i64, before: i64) -> Option<&PostSnapshot> {
         self.snapshots(post_id).iter().rev().find(|s| s.captured_at <= before)
     }
-    /// Comments that score for a post: LinkedIn's own total minus the author's comments we have
-    /// seen. The extension reads the rendered post page, which shows only the first several
-    /// comments, so the rows are a sample — never a count. When we have read none at all the
-    /// total stands as is.
+    /// Comments that score for a post: the number of distinct people other than the author who
+    /// commented. One person replying five times in a thread counts once — engagement is about
+    /// how many people showed up, not how chatty one of them was. The extension reads the whole
+    /// thread (top-level comments and collapsed replies), so the rows are the population. When we
+    /// have read none at all — the collector failed, or the post predates it — LinkedIn's own
+    /// total stands rather than scoring the post as if nobody commented.
     pub fn scored_comments(&self, post_id: i64, linkedin_total: i64) -> i64 {
         let rows = self.comments(post_id);
-        let self_seen = rows.iter().filter(|c| c.is_self).count() as i64;
-        let others_seen = rows.len() as i64 - self_seen;
-        (linkedin_total - self_seen).max(others_seen).max(0)
+        if rows.is_empty() {
+            return linkedin_total.max(0);
+        }
+        rows.iter()
+            .filter(|c| !c.is_self)
+            .map(|c| c.commenter_urn.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .len() as i64
     }
 }
 
@@ -390,7 +397,8 @@ pub struct LedgerPost {
     pub posted_at: i64,
     pub is_repost: bool,
     pub reactions: i64,
-    /// Comments by other people — what is priced. LinkedIn's total is `comments_total`.
+    /// Distinct people other than the author who commented — what is priced. LinkedIn's raw
+    /// comment total is `comments_total`.
     pub comments: i64,
     pub comments_total: i64,
     pub reposts: i64,
@@ -560,9 +568,9 @@ fn score_member_full(
 
         // A post with no snapshot yet still "shows up"; it just has no engagement to price.
         let snap = data.latest_snapshot_before(post.id, comp.end_at);
-        // Comments score from the rows we actually read, excluding the author's own — replying
-        // to your own thread shouldn't earn points. When we have no rows at all (nothing read
-        // yet), fall back to LinkedIn's total rather than scoring the post as if it had none.
+        // Comments score as distinct commenters from the rows we actually read, excluding the
+        // author — replying to your own thread shouldn't earn points, and one person's ten
+        // replies are one person. With no rows at all (nothing read yet), LinkedIn's total stands.
         let comments_total = snap.and_then(|s| s.comments).unwrap_or(0);
         let comments = data.scored_comments(post.id, comments_total);
         let e = Engagement {
@@ -772,21 +780,25 @@ mod tests {
     }
 
     #[test]
-    fn scored_comments_is_linkedin_total_minus_the_authors_own() {
+    fn scored_comments_counts_distinct_people_other_than_the_author() {
         use crate::models::PostComment;
         let mut data = Dataset::default();
-        let row = |urn: &str, is_self: bool| PostComment {
-            id: 0, post_id: 7, urn: urn.into(), commenter_urn: "urn:li:publicIdentifier:x".into(),
+        let row = |urn: &str, who: &str, is_self: bool| PostComment {
+            id: 0, post_id: 7, urn: urn.into(), commenter_urn: format!("urn:li:publicIdentifier:{who}"),
             commenter_name: None, is_self, is_reply: false, created_at: 0, captured_at: 0,
             post: Default::default(),
         };
-        // Nothing read: the total stands.
+        // Nothing read: LinkedIn's total stands.
         assert_eq!(data.scored_comments(7, 12), 12);
-        // Page showed 3 of 12 comments, one by the author: 12 − 1.
-        data.comments_by_post.insert(7, vec![row("a", false), row("b", true), row("c", false)]);
-        assert_eq!(data.scored_comments(7, 12), 11);
-        // A stale total below what we saw never under-counts what we saw.
-        assert_eq!(data.scored_comments(7, 1), 2);
+        // Six comments: Ada twice, Bob three times, the author once → two people.
+        data.comments_by_post.insert(7, vec![
+            row("a", "ada", false), row("b", "bob", false), row("c", "me", true),
+            row("d", "ada", false), row("e", "bob", false), row("f", "bob", false),
+        ]);
+        assert_eq!(data.scored_comments(7, 6), 2);
+        // Only the author commented: nothing scores, whatever LinkedIn's total says.
+        data.comments_by_post.insert(7, vec![row("a", "me", true), row("b", "me", true)]);
+        assert_eq!(data.scored_comments(7, 2), 0);
     }
 
     #[test]

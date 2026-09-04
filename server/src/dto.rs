@@ -124,7 +124,7 @@ pub struct CompanyStats {
     pub members: usize,
     /// Members with at least one post inside the window.
     pub members_posting: usize,
-    /// Comments other people left on in-window posts.
+    /// Distinct other people who commented on in-window posts, summed per post.
     pub comments_sparked: i64,
     /// Sum of every scoring member's latest follower count.
     pub follower_reach: i64,
@@ -195,8 +195,8 @@ pub struct PostStat {
     pub reactions: i64,
     /// LinkedIn's total comment count.
     pub comments: i64,
-    /// Comments by people other than the author — what actually scores. Equals `comments` until
-    /// we have read the comment list for this post.
+    /// Distinct people other than the author who commented — what actually scores. Equals
+    /// `comments` until we have read the thread for this post.
     pub comments_by_others: i64,
     pub reposts: i64,
     pub sends: i64,

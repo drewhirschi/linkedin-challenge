@@ -85,6 +85,35 @@ Rather than hard-code IDs that break weekly, discover them from the live page:
 
 This keeps the fragile part in one place and self-healing.
 
+### Comments (whole thread)
+
+Voyager's comment endpoints (`/feed/comments`, `/feed/dash/comments`, the GraphQL surface) answer
+400/404 for the current site. The post page itself only renders the first handful. What LinkedIn's
+own page uses is its server-driven UI (SDUI), and that is replayable from the extension with just
+the CSRF header (all the `x-li-*` tracing headers may be omitted; stale ones cause a 500):
+
+| Purpose | Endpoint | Notes |
+|---|---|---|
+| Comment list | `POST /flagship-web/rsc-action/actions/pagination?sduiid=com.linkedin.sdui.pagers.feed.pagedComments` | Body `{pagerId, clientArguments, paginationRequest}`. Response is a React Flight stream (`id:json` lines). |
+| Collapsed replies | `POST /flagship-web/rsc-action/actions/server-request?sduiid=com.linkedin.sdui.feed.update.comments.fetchReplies` | Body `{requestId, serverRequest:{requestId, requestedArguments}, states:[], requestedArguments:{...+states:[]}}`, with `requestedArguments` copied verbatim from the `ServerRequest` action found in the comment-list stream. |
+
+Established by bisection against the real request: every field is optional **except**
+`clientArguments.states: []` (its absence is a 500), and the tracking id may be anything. The
+page's own `nextPageRequest` (escaped JSON in the HTML) carries the thread key — an activity for
+a normal post, the original `ugcPost` for a repost — and a page token that is a tiny protobuf:
+a session string then field 2 = offset. Reusing that request with the offset reset to 0 and
+`pageSize`/`subsequentPageSize` 250 returns the whole thread in one call (a 134-comment post came
+back as 128 top-level + visible replies, ~55 MB). Without a genuine token the server caps at
+about 20 and ignores the thread key, so the synthetic request is only a fallback. Sort order
+must stay `CommentSortOrder_RELEVANCE`; the reverse-chronological value returns an empty stream.
+
+In the stream each comment is an element whose `componentKey` is `replaceableComment_<urn>`; its
+subtree (following `$L<id>` chunk references) holds the author's profile link first, the avatar's
+`View <name>’s profile` label, and a `comment-actor-description` / `reply-actor-description`
+tracking view. Later links in the subtree are @mentions. The `"Name • You"` text runs are each
+comment's reply box, not the author — they misled the first parse. `scripts/test-extension-e2e.mjs`
+asserts whole-thread coverage on the busiest post so a regression to the first page is caught.
+
 ## Metrics we collect
 
 Per **profile snapshot** (a few times/day): `followerCount`, `profileViews` (from the "who viewed
@@ -92,7 +121,9 @@ your profile" / WVMP surface, author-only), timestamp.
 
 Per **post**: URN, permalink, created time, text preview. Per **post snapshot**: `impressions`
 (author-only), `reactions`, `comments`, `reposts`. Reactions/comments/reposts are in the public
-`socialDetail`; impressions require the analytics surface above.
+`socialDetail`; impressions require the analytics surface above. Per **comment** (whole thread):
+URN, commenter public identifier and name, reply flag — scoring counts distinct non-author
+commenters per post.
 
 ## Etiquette / risk controls (baked into the extension)
 
