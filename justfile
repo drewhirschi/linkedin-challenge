@@ -32,8 +32,7 @@ run-prod:
 migrate:
     cd server && DATABASE_URL=turso:linkedin.db cargo run --quiet --bin migrate
 
-# Apply the schema and additive migrations to the PRODUCTION database (credentials from
-# server/.env.local). `just deploy` runs this automatically before uploading a build.
+# Migrate the PRODUCTION database (creds from server/.env.local); `just deploy` runs this first.
 migrate-prod:
     cd server && test -f .env.local || { echo "missing server/.env.local (run: vercel env pull .env.local)" >&2; exit 1; }
     cd server && set -a && . ./.env.local && set +a && DATABASE_URL="$DATABASE_URL_UNPOOLED" cargo run --quiet --release --bin migrate
