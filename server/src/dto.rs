@@ -9,12 +9,10 @@ use serde::{Deserialize, Serialize};
 use toasty::Db;
 use utoipa::ToSchema;
 
-use crate::models::{
-    ChallengeMembership, Competition, Invite, Member, Org, Post, PostComment, PostSnapshot,
-};
+use crate::models::{ChallengeMembership, Competition, Invite, Member, Org, Post};
 use crate::scoring::{
-    Engagement, ScoringConfig, Standing, WEEK_SECONDS, active_competition, compute_standings,
-    current_week,
+    Dataset, Engagement, ScoringConfig, Standing, WEEK_SECONDS, active_competition,
+    current_week, standings_from,
 };
 use crate::util::now_unix;
 use crate::web::{ApiError, ApiResult};
@@ -398,18 +396,25 @@ pub async fn member_challenges(db: &mut Db, member_id: i64) -> ApiResult<Vec<Com
         ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(member_id))
             .exec(&mut *db)
             .await?;
-    let mut challenges = Vec::new();
-    for membership in memberships {
-        if let Some(challenge) = Competition::filter_by_id(membership.challenge_id)
-            .first()
-            .exec(&mut *db)
-            .await?
-        {
-            challenges.push(challenge);
-        }
-    }
+    let mut challenges = challenges_by_ids(
+        db,
+        memberships.iter().map(|m| m.challenge_id).collect(),
+    )
+    .await?;
     challenges.sort_by(|a, b| b.start_at.cmp(&a.start_at));
     Ok(challenges)
+}
+
+/// The challenges with these ids, in one query (none when the list is empty).
+pub async fn challenges_by_ids(db: &mut Db, mut ids: Vec<i64>) -> ApiResult<Vec<Competition>> {
+    ids.sort_unstable();
+    ids.dedup();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(Competition::filter(Competition::fields().id().in_list(ids))
+        .exec(&mut *db)
+        .await?)
 }
 
 pub async fn member_challenge(db: &mut Db, member_id: i64, id: i64) -> ApiResult<Competition> {
@@ -496,25 +501,30 @@ pub async fn leaderboard(
         None => active_competition(comps, now_unix()),
     };
 
-    let standings = match &comp {
-        Some(c) => rank(compute_standings(db, c).await?),
-        None => Vec::new(),
+    let now = now_unix();
+    // One batched load serves the standings, the company strip, and the top posts.
+    let data = match &comp {
+        Some(c) => Some(Dataset::load_for_competition(db, c).await?),
+        None => None,
+    };
+    let standings = match (&comp, &data) {
+        (Some(c), Some(data)) => rank(standings_from(c, data, now)),
+        _ => Vec::new(),
     };
     let viewer = standings.iter().find(|s| s.member_id == member.id).map(clone_row);
 
-    let now = now_unix();
     let season = comp.as_ref().map(|c| Season {
         week: current_week(c, now) + 1,
         weeks: ScoringConfig::weeks_in(c.start_at, c.end_at),
         progress: ((now - c.start_at) as f64 / (c.end_at - c.start_at).max(1) as f64).clamp(0.0, 1.0),
         as_of: now,
     });
-    let (company, top_posts) = match &comp {
-        Some(c) => {
-            let (company, top) = company_stats(db, c, &standings, now).await?;
+    let (company, top_posts) = match (&comp, &data) {
+        (Some(c), Some(data)) => {
+            let (company, top) = company_stats(c, data, &standings, now);
             (Some(company), top)
         }
-        None => (None, Vec::new()),
+        _ => (None, Vec::new()),
     };
 
     Ok(Leaderboard {
@@ -564,18 +574,14 @@ fn clone_row(s: &StandingRow) -> StandingRow {
 }
 
 /// Company-wide totals every member may see, plus this week's top three posts. One pass over
-/// every member's in-window posts serves both.
-async fn company_stats(
-    db: &mut Db,
+/// every member's in-window posts serves both; no queries.
+fn company_stats(
     comp: &Competition,
+    data: &Dataset,
     standings: &[StandingRow],
     now: i64,
-) -> ApiResult<(CompanyStats, Vec<TopPost>)> {
+) -> (CompanyStats, Vec<TopPost>) {
     let cfg = ScoringConfig::from_competition(comp);
-    let memberships =
-        ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
-            .exec(&mut *db)
-            .await?;
     let week = current_week(comp, now);
     let week_start = comp.start_at + week * WEEK_SECONDS;
     let week_end = (week_start + WEEK_SECONDS - 1).min(comp.end_at);
@@ -583,20 +589,10 @@ async fn company_stats(
     let mut members_posting = 0usize;
     let mut comments_sparked = 0i64;
     let mut top: Vec<TopPost> = Vec::new();
-    for membership in &memberships {
-        let Some(member) = Member::filter_by_id(membership.member_id)
-            .first()
-            .exec(&mut *db)
-            .await?
-        else {
-            continue;
-        };
-        let posts = Post::filter(Post::fields().member_id().eq(member.id))
-            .exec(&mut *db)
-            .await?;
+    for member in data.members.values() {
         let mut posted = false;
-        for post in &posts {
-            let (stat, posted_at) = post_stats(db, post).await?;
+        for post in data.posts(member.id) {
+            let (stat, posted_at) = post_stats(data, post);
             if posted_at < comp.start_at || posted_at > comp.end_at {
                 continue;
             }
@@ -636,15 +632,15 @@ async fn company_stats(
     });
     top.truncate(3);
 
-    Ok((
+    (
         CompanyStats {
-            members: memberships.len(),
+            members: data.members.len(),
             members_posting,
             comments_sparked,
             follower_reach: standings.iter().map(|s| s.follower_count).sum(),
         },
         top,
-    ))
+    )
 }
 
 /// Standings plus totals for one challenge — the admin view of a board.
@@ -661,36 +657,23 @@ pub async fn competition_aggregate(
         .exec(&mut *db)
         .await?
         .ok_or_else(|| ApiError::not_found("challenge not found"))?;
-    let standings = rank(compute_standings(db, &comp).await?);
-    aggregate_for(db, &comp, &standings).await
+    let data = Dataset::load_for_competition(db, &comp).await?;
+    let standings = rank(standings_from(&comp, &data, now_unix()));
+    aggregate_for(db, &comp, &data, &standings).await
 }
 
 /// Totals across the org for one challenge window.
 pub async fn aggregate_for(
     db: &mut Db,
     comp: &Competition,
+    data: &Dataset,
     standings: &[StandingRow],
 ) -> ApiResult<Aggregate> {
-    let memberships =
-        ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
-            .exec(&mut *db)
-            .await?;
-
     let mut totals = (0i64, 0i64, 0i64, 0i64);
     let mut total_posts = 0usize;
-    for membership in &memberships {
-        let Some(member) = Member::filter_by_id(membership.member_id)
-            .first()
-            .exec(&mut *db)
-            .await?
-        else {
-            continue;
-        };
-        let posts = Post::filter(Post::fields().member_id().eq(member.id))
-            .exec(&mut *db)
-            .await?;
-        for post in &posts {
-            let (stat, posted_at) = post_stats(db, post).await?;
+    for member in data.members.values() {
+        for post in data.posts(member.id) {
+            let (stat, posted_at) = post_stats(data, post);
             if posted_at >= comp.start_at && posted_at <= comp.end_at {
                 total_posts += 1;
                 totals.0 += stat.impressions;
@@ -706,7 +689,7 @@ pub async fn aggregate_for(
         .await?;
 
     Ok(Aggregate {
-        participants: memberships.len(),
+        participants: data.members.len(),
         scoring_participants: standings.len(),
         total_posts,
         graded_posts: standings.iter().map(|s| s.graded_posts).sum(),
@@ -721,33 +704,15 @@ pub async fn aggregate_for(
     })
 }
 
-/// Latest snapshot per post, plus the earliest capture time (the fallback "posted at").
-async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
-    let mut snaps = PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post.id))
-        .exec(&mut *db)
-        .await?;
-    snaps.sort_by_key(|s| s.captured_at);
-
-    let earliest = snaps.first().map(|s| s.captured_at).unwrap_or(0);
+/// Latest snapshot per post, plus the effective "posted at" (creation time, else first capture).
+fn post_stats(data: &Dataset, post: &Post) -> (PostStat, i64) {
+    let snaps = data.snapshots(post.id);
     let latest = snaps.last();
-
     // Comments we actually read, minus the author's own — None when we've read none.
-    let comment_rows = PostComment::filter(PostComment::fields().post_id().eq(post.id))
-        .exec(&mut *db)
-        .await?;
-    let others = if comment_rows.is_empty() {
-        None
-    } else {
-        Some(comment_rows.iter().filter(|c| !c.is_self).count() as i64)
-    };
+    let others = data.comments_by_others(post.id);
+    let posted_at = data.posted_at(post).unwrap_or(0);
 
-    let posted_at = if post.created_at > 0 {
-        post.created_at
-    } else {
-        earliest
-    };
-
-    Ok((
+    (
         PostStat {
             id: post.id,
             urn: post.urn.clone(),
@@ -779,7 +744,7 @@ async fn post_stats(db: &mut Db, post: &Post) -> ApiResult<(PostStat, i64)> {
             in_window: false,
         },
         posted_at,
-    ))
+    )
 }
 
 pub async fn member_detail(
@@ -812,24 +777,27 @@ pub async fn member_detail(
     };
 
     // This member's row, taken from the same ranked standings the leaderboard shows, so the rank
-    // on a detail page always agrees with the rank on the board.
-    let standing = match &comp {
-        Some(c) => rank(compute_standings(db, c).await?)
-            .into_iter()
-            .find(|s| s.member_id == member_id),
-        None => None,
+    // on a detail page always agrees with the rank on the board. The board's dataset already
+    // holds this member's posts, so it doubles as the detail's data source.
+    let (standing, data) = match &comp {
+        Some(c) => {
+            let data = Dataset::load_for_competition(db, c).await?;
+            let standing = rank(standings_from(c, &data, now_unix()))
+                .into_iter()
+                .find(|s| s.member_id == member_id);
+            (standing, data)
+        }
+        None => (None, Dataset::load(db, &[member.id]).await?),
     };
 
-    let posts = Post::filter(Post::fields().member_id().eq(member.id))
-        .exec(&mut *db)
-        .await?;
+    let posts = data.posts(member.id);
 
     let mut in_window: Vec<(i64, PostStat)> = Vec::new();
     let mut outside: Vec<PostStat> = Vec::new();
     let mut all_posts: Vec<PostStat> = Vec::new();
 
-    for post in &posts {
-        let (mut stat, posted_at) = post_stats(db, post).await?;
+    for post in posts {
+        let (mut stat, posted_at) = post_stats(&data, post);
         all_posts.push(clone_stat(&stat));
         match &comp {
             Some(c) if posted_at >= c.start_at && posted_at <= c.end_at => {
@@ -948,13 +916,12 @@ pub async fn user_posts(
     post_page: usize,
     post_page_size: usize,
 ) -> ApiResult<PostPage> {
-    let stored = Post::filter(Post::fields().member_id().eq(member_id))
-        .exec(&mut *db)
-        .await?;
-    let mut posts = Vec::with_capacity(stored.len());
-    for post in &stored {
-        posts.push(post_stats(db, post).await?.0);
-    }
+    let data = Dataset::load(db, &[member_id]).await?;
+    let mut posts: Vec<PostStat> = data
+        .posts(member_id)
+        .iter()
+        .map(|post| post_stats(&data, post).0)
+        .collect();
     let needle = post_filter
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -994,28 +961,25 @@ pub async fn user_posts(
 }
 
 pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverview> {
-    let owner_memberships =
+    let owned: Vec<i64> =
         ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(admin.id))
             .exec(&mut *db)
             .await?
             .into_iter()
-            .filter(|membership| membership.role == "owner");
-    let mut comps = Vec::new();
-    for membership in owner_memberships {
-        if let Some(challenge) = Competition::filter_by_id(membership.challenge_id)
-            .first()
-            .exec(&mut *db)
-            .await?
-        {
-            comps.push(challenge);
-        }
-    }
+            .filter(|membership| membership.role == "owner")
+            .map(|membership| membership.challenge_id)
+            .collect();
+    let mut comps = challenges_by_ids(db, owned).await?;
     comps.sort_by(|a, b| b.start_at.cmp(&a.start_at));
     let competitions: Vec<CompetitionInfo> = comps.iter().map(CompetitionInfo::new).collect();
 
     let current = active_competition(comps, now_unix());
+    let data = match &current {
+        Some(c) => Dataset::load_for_competition(db, c).await?,
+        None => Dataset::default(),
+    };
     let standings = match &current {
-        Some(c) => rank(compute_standings(db, c).await?),
+        Some(c) => rank(standings_from(c, &data, now_unix())),
         None => Vec::new(),
     };
 
@@ -1029,39 +993,13 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
     };
     invites.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 
-    let memberships = match &current {
-        Some(challenge) => {
-            ChallengeMembership::filter(
-                ChallengeMembership::fields()
-                    .challenge_id()
-                    .eq(challenge.id),
-            )
-            .exec(&mut *db)
-            .await?
-        }
-        None => Vec::new(),
-    };
-    let mut members = Vec::new();
-    for membership in &memberships {
-        if let Some(member) = Member::filter_by_id(membership.member_id)
-            .first()
-            .exec(&mut *db)
-            .await?
-        {
-            members.push(member);
-        }
-    }
-
     // Engagement totals come from the latest snapshot of every in-window post, which is the same
     // basis the scoring uses — so the aggregate and the leaderboard can't disagree.
     let mut totals = (0i64, 0i64, 0i64, 0i64);
     let mut total_posts = 0usize;
-    for m in &members {
-        let posts = Post::filter(Post::fields().member_id().eq(m.id))
-            .exec(&mut *db)
-            .await?;
-        for post in &posts {
-            let (stat, posted_at) = post_stats(db, post).await?;
+    for m in data.members.values() {
+        for post in data.posts(m.id) {
+            let (stat, posted_at) = post_stats(&data, post);
             let counted = match &current {
                 Some(c) => posted_at >= c.start_at && posted_at <= c.end_at,
                 None => false,
@@ -1077,7 +1015,7 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
     }
 
     let aggregate = Aggregate {
-        participants: members.len(),
+        participants: data.members.len(),
         scoring_participants: standings.len(),
         total_posts,
         graded_posts: standings.iter().map(|s| s.graded_posts).sum(),
@@ -1135,33 +1073,33 @@ pub struct SystemOverview {
 
 /// Every account, for the hand-operated product support panel.
 pub async fn system_overview(db: &mut Db) -> ApiResult<SystemOverview> {
+    // Three whole-table reads rather than two queries per account: this panel lists everyone,
+    // so per-row lookups would grow with the user base against a remote database.
     let mut users = Member::all().exec(&mut *db).await?;
     users.sort_by(|a, b| a.display_name.cmp(&b.display_name));
-    let mut members = Vec::new();
-    for user in users {
-        let owns_challenge =
-            ChallengeMembership::filter(ChallengeMembership::fields().member_id().eq(user.id))
-                .exec(&mut *db)
-                .await?
-                .into_iter()
-                .any(|membership| membership.role == "owner");
-        let mut snapshots = crate::models::ProfileSnapshot::filter(
-            crate::models::ProfileSnapshot::fields()
-                .member_id()
-                .eq(user.id),
-        )
+    let owners: std::collections::HashSet<i64> = ChallengeMembership::all()
         .exec(&mut *db)
-        .await?;
-        snapshots.sort_by_key(|snapshot| snapshot.captured_at);
-        members.push(SystemMemberRow {
+        .await?
+        .into_iter()
+        .filter(|membership| membership.role == "owner")
+        .map(|membership| membership.member_id)
+        .collect();
+    let mut last_synced: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+    for snapshot in crate::models::ProfileSnapshot::all().exec(&mut *db).await? {
+        let entry = last_synced.entry(snapshot.member_id).or_insert(snapshot.captured_at);
+        *entry = (*entry).max(snapshot.captured_at);
+    }
+    let members = users
+        .into_iter()
+        .map(|user| SystemMemberRow {
             id: user.id,
+            owns_challenge: owners.contains(&user.id),
+            last_synced_at: last_synced.get(&user.id).copied(),
             display_name: user.display_name,
             email: user.email,
-            owns_challenge,
             is_system_admin: user.is_system_admin,
-            last_synced_at: snapshots.last().map(|snapshot| snapshot.captured_at),
             created_at: user.created_at,
-        });
-    }
+        })
+        .collect();
     Ok(SystemOverview { members })
 }

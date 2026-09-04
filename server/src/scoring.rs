@@ -14,6 +14,8 @@
 //! Profile points (followers gained, profile views) remain available for challenges that price
 //! them; the LinkedIn Cup rules leave those rates at zero.
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use toasty::Db;
 
@@ -262,39 +264,145 @@ pub struct Standing {
     pub best_streak_weeks: u32,
 }
 
+/// Everything scoring reads, fetched in a fixed handful of queries and indexed in memory.
+///
+/// The naive shape — one query per member, then several per post — costs a round trip each,
+/// which is nothing against a local file and 20–40 seconds against a remote Postgres. Loading
+/// each table once for the members in question keeps a board at six queries regardless of size.
+#[derive(Default)]
+pub struct Dataset {
+    pub members: HashMap<i64, Member>,
+    pub posts_by_member: HashMap<i64, Vec<Post>>,
+    /// Sorted by `captured_at` ascending.
+    pub snapshots_by_post: HashMap<i64, Vec<PostSnapshot>>,
+    pub comments_by_post: HashMap<i64, Vec<PostComment>>,
+    /// Sorted by `captured_at` ascending.
+    pub profile_by_member: HashMap<i64, Vec<ProfileSnapshot>>,
+}
+
+impl Dataset {
+    /// Load the members with these ids and all of their posts, snapshots, comments, and profile
+    /// readings. Five queries, or none when `member_ids` is empty.
+    pub async fn load(db: &mut Db, member_ids: &[i64]) -> toasty::Result<Self> {
+        let mut data = Self::default();
+        if member_ids.is_empty() {
+            return Ok(data);
+        }
+        let ids: Vec<i64> = member_ids.to_vec();
+
+        for member in Member::filter(Member::fields().id().in_list(ids.clone()))
+            .exec(&mut *db)
+            .await?
+        {
+            data.members.insert(member.id, member);
+        }
+
+        let posts = Post::filter(Post::fields().member_id().in_list(ids.clone()))
+            .exec(&mut *db)
+            .await?;
+        let post_ids: Vec<i64> = posts.iter().map(|p| p.id).collect();
+        for post in posts {
+            data.posts_by_member.entry(post.member_id).or_default().push(post);
+        }
+
+        if !post_ids.is_empty() {
+            let mut snapshots =
+                PostSnapshot::filter(PostSnapshot::fields().post_id().in_list(post_ids.clone()))
+                    .exec(&mut *db)
+                    .await?;
+            snapshots.sort_by_key(|s| s.captured_at);
+            for snapshot in snapshots {
+                data.snapshots_by_post.entry(snapshot.post_id).or_default().push(snapshot);
+            }
+            for comment in
+                PostComment::filter(PostComment::fields().post_id().in_list(post_ids))
+                    .exec(&mut *db)
+                    .await?
+            {
+                data.comments_by_post.entry(comment.post_id).or_default().push(comment);
+            }
+        }
+
+        let mut profiles =
+            ProfileSnapshot::filter(ProfileSnapshot::fields().member_id().in_list(ids))
+                .exec(&mut *db)
+                .await?;
+        profiles.sort_by_key(|p| p.captured_at);
+        for profile in profiles {
+            data.profile_by_member.entry(profile.member_id).or_default().push(profile);
+        }
+        Ok(data)
+    }
+
+    /// Load everyone who joined `comp`, plus their data. Six queries.
+    pub async fn load_for_competition(db: &mut Db, comp: &Competition) -> toasty::Result<Self> {
+        let memberships =
+            ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
+                .exec(&mut *db)
+                .await?;
+        let ids: Vec<i64> = memberships.iter().map(|m| m.member_id).collect();
+        Self::load(db, &ids).await
+    }
+
+    pub fn posts(&self, member_id: i64) -> &[Post] {
+        self.posts_by_member.get(&member_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+    pub fn snapshots(&self, post_id: i64) -> &[PostSnapshot] {
+        self.snapshots_by_post.get(&post_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+    pub fn comments(&self, post_id: i64) -> &[PostComment] {
+        self.comments_by_post.get(&post_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+    pub fn profile(&self, member_id: i64) -> &[ProfileSnapshot] {
+        self.profile_by_member.get(&member_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// The post's own creation time, or its first snapshot when LinkedIn didn't give us one.
+    pub fn posted_at(&self, post: &Post) -> Option<i64> {
+        if post.created_at > 0 {
+            Some(post.created_at)
+        } else {
+            self.snapshots(post.id).first().map(|s| s.captured_at)
+        }
+    }
+    pub fn latest_snapshot_before(&self, post_id: i64, before: i64) -> Option<&PostSnapshot> {
+        self.snapshots(post_id).iter().rev().find(|s| s.captured_at <= before)
+    }
+    /// Comments by anyone other than the post's author, or None when we have read none.
+    pub fn comments_by_others(&self, post_id: i64) -> Option<i64> {
+        let rows = self.comments(post_id);
+        if rows.is_empty() {
+            None
+        } else {
+            Some(rows.iter().filter(|c| !c.is_self).count() as i64)
+        }
+    }
+}
+
 /// Compute the full leaderboard for a competition, sorted by total score descending.
 ///
 /// Ranks only users who explicitly joined this challenge. Membership is the user's grant for the
 /// challenge to read and score their post data.
 pub async fn compute_standings(db: &mut Db, comp: &Competition) -> toasty::Result<Vec<Standing>> {
+    let data = Dataset::load_for_competition(db, comp).await?;
+    Ok(standings_from(comp, &data, now_unix()))
+}
+
+/// The leaderboard over already-loaded data; no queries.
+pub fn standings_from(comp: &Competition, data: &Dataset, now: i64) -> Vec<Standing> {
     let cfg = ScoringConfig::from_competition(comp);
-    let now = now_unix();
-    let memberships =
-        ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
-            .exec(&mut *db)
-            .await?;
-
-    let mut standings = Vec::new();
-    for membership in memberships {
-        let Some(member) = Member::filter_by_id(membership.member_id)
-            .first()
-            .exec(&mut *db)
-            .await?
-        else {
-            continue;
-        };
-        if let Some(standing) = score_member(db, &member, comp, &cfg, now).await? {
-            standings.push(standing);
-        }
-    }
-
+    let mut standings: Vec<Standing> = data
+        .members
+        .values()
+        .filter_map(|member| score_member(member, comp, &cfg, data, now))
+        .collect();
     standings.sort_by(|a, b| {
         b.total
             .partial_cmp(&a.total)
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| a.display_name.cmp(&b.display_name))
     });
-    Ok(standings)
+    standings
 }
 
 /// The 0-based scoring week that `now` falls in, clamped to the window.
@@ -332,28 +440,19 @@ pub fn best_streak(active: &[bool]) -> u32 {
     best
 }
 
-async fn score_member(
-    db: &mut Db,
+fn score_member(
     member: &Member,
     comp: &Competition,
     cfg: &ScoringConfig,
+    data: &Dataset,
     now: i64,
-) -> toasty::Result<Option<Standing>> {
-    let posts = Post::filter(Post::fields().member_id().eq(member.id))
-        .exec(&mut *db)
-        .await?;
-
-    let profile_snaps = {
-        let mut s = ProfileSnapshot::filter(ProfileSnapshot::fields().member_id().eq(member.id))
-            .exec(&mut *db)
-            .await?;
-        s.sort_by_key(|p| p.captured_at);
-        s
-    };
+) -> Option<Standing> {
+    let posts = data.posts(member.id);
+    let profile_snaps = data.profile(member.id);
 
     // Skip members with no collected data at all (e.g. an admin who never linked the extension).
     if posts.is_empty() && profile_snaps.is_empty() {
-        return Ok(None);
+        return None;
     }
 
     // --- Per-post engagement, bucketed by scoring week --------------------------------------
@@ -361,16 +460,8 @@ async fn score_member(
     let mut by_week: Vec<Vec<f64>> = vec![Vec::new(); weeks];
     let mut total_posts_in_window = 0usize;
 
-    for post in &posts {
-        // Effective time: the post's own creation time, or its first snapshot if unknown.
-        let effective = if post.created_at > 0 {
-            post.created_at
-        } else {
-            match earliest_post_snapshot(db, post.id).await? {
-                Some(ts) => ts,
-                None => continue,
-            }
-        };
+    for post in posts {
+        let Some(effective) = data.posted_at(post) else { continue };
         if effective < comp.start_at || effective > comp.end_at {
             continue;
         }
@@ -378,16 +469,15 @@ async fn score_member(
         let week = ((effective - comp.start_at) / WEEK_SECONDS) as usize;
 
         // A post with no snapshot yet still "shows up"; it just has no engagement to price.
-        let engagement = match latest_post_snapshot_before(db, post.id, comp.end_at).await? {
+        let engagement = match data.latest_snapshot_before(post.id, comp.end_at) {
             Some(snap) => {
                 // Comments score from the rows we actually read, excluding the author's own —
                 // replying to your own thread shouldn't earn points. When we have no rows at all
                 // (nothing read yet), fall back to LinkedIn's total rather than scoring the post
                 // as if it had no comments.
-                let comments = match comments_by_others(db, post.id).await? {
-                    Some(n) => n,
-                    None => snap.comments.unwrap_or(0),
-                };
+                let comments = data
+                    .comments_by_others(post.id)
+                    .unwrap_or_else(|| snap.comments.unwrap_or(0));
                 cfg.post_engagement(&Engagement {
                     reactions: snap.reactions.unwrap_or(0),
                     comments,
@@ -459,7 +549,7 @@ async fn score_member(
     let post_points = show_up + engagement;
     let total = post_points + consistency + profile_points;
 
-    Ok(Some(Standing {
+    Some(Standing {
         member_id: member.id,
         display_name: member.display_name.clone(),
         profile_url: member.profile_url.clone(),
@@ -477,7 +567,7 @@ async fn score_member(
         active_weeks,
         streak_weeks: streak,
         best_streak_weeks: best,
-    }))
+    })
 }
 
 /// Latest value minus earliest value across the window snapshots, for a chosen metric.
@@ -488,38 +578,6 @@ fn window_delta(snaps: &[&ProfileSnapshot], pick: impl Fn(&ProfileSnapshot) -> O
         (Some(a), Some(b)) => b - a,
         _ => 0,
     }
-}
-
-async fn earliest_post_snapshot(db: &mut Db, post_id: i64) -> toasty::Result<Option<i64>> {
-    let mut snaps = PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post_id))
-        .exec(&mut *db)
-        .await?;
-    snaps.sort_by_key(|s| s.captured_at);
-    Ok(snaps.first().map(|s| s.captured_at))
-}
-
-async fn latest_post_snapshot_before(
-    db: &mut Db,
-    post_id: i64,
-    before: i64,
-) -> toasty::Result<Option<PostSnapshot>> {
-    let mut snaps = PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post_id))
-        .exec(&mut *db)
-        .await?;
-    snaps.retain(|s| s.captured_at <= before);
-    snaps.sort_by_key(|s| s.captured_at);
-    Ok(snaps.pop())
-}
-
-/// Comments by anyone other than the post's author, or None when we have read no comments for it.
-pub async fn comments_by_others(db: &mut Db, post_id: i64) -> toasty::Result<Option<i64>> {
-    let rows = PostComment::filter(PostComment::fields().post_id().eq(post_id))
-        .exec(&mut *db)
-        .await?;
-    if rows.is_empty() {
-        return Ok(None);
-    }
-    Ok(Some(rows.iter().filter(|c| !c.is_self).count() as i64))
 }
 
 #[cfg(test)]

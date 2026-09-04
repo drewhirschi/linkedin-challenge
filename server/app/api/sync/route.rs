@@ -8,6 +8,7 @@ use linkedin_challenge_server::models::{Post, PostComment, PostSnapshot, Profile
 use linkedin_challenge_server::util::{now_unix, parse_iso8601};
 use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use toasty::Db;
 use utoipa::ToSchema;
 
@@ -138,63 +139,91 @@ pub async fn post(
     .exec(&mut db)
     .await?;
 
+    // This member's stored posts, read once: the reconciliation below and the upsert loop both
+    // key off URN, and a lookup per post would be a round trip per post against a remote database.
+    let mut stored: HashMap<String, Post> = Post::filter(Post::fields().member_id().eq(member.id))
+        .exec(&mut db)
+        .await?
+        .into_iter()
+        .map(|post| (post.urn.clone(), post))
+        .collect();
+
     // Older extension builds treated normalized entities nested under a reshare as separate posts.
-    // Reconcile only explicit nested URNs, and only when the stored post belongs to this member.
-    for urn in &req.excluded_post_urns {
-        let Some(post) = Post::filter_by_urn(urn).first().exec(&mut db).await? else {
-            continue;
-        };
-        if post.member_id != member.id {
-            continue;
-        }
-        PostComment::filter(PostComment::fields().post_id().eq(post.id))
-            .delete()
-            .exec(&mut db)
-            .await?;
-        PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post.id))
-            .delete()
-            .exec(&mut db)
-            .await?;
-        Post::filter_by_id(post.id).delete().exec(&mut db).await?;
-    }
+    // Reconcile only explicit nested URNs; a URN stored under another member is simply not ours.
+    let mut doomed: Vec<i64> = req
+        .excluded_post_urns
+        .iter()
+        .filter_map(|urn| stored.remove(urn).map(|post| post.id))
+        .collect();
 
     // A deleted-and-reposted LinkedIn post has a new activity URN. When the feed page is known to
     // be complete, remove stored URNs LinkedIn no longer returns so the deleted original does not
     // live forever beside its replacement. Never reconcile a full page: missing rows may be on the
     // next page rather than deleted.
     if req.post_feed_complete {
-        let current_urns: std::collections::HashSet<&str> =
-            req.posts.iter().map(|post| post.urn.as_str()).collect();
-        let stored = Post::filter(Post::fields().member_id().eq(member.id))
-            .exec(&mut db)
-            .await?;
-        for post in stored {
-            if current_urns.contains(post.urn.as_str()) {
-                continue;
+        let current_urns: HashSet<&str> = req.posts.iter().map(|post| post.urn.as_str()).collect();
+        let gone: Vec<String> = stored
+            .keys()
+            .filter(|urn| !current_urns.contains(urn.as_str()))
+            .cloned()
+            .collect();
+        for urn in gone {
+            if let Some(post) = stored.remove(&urn) {
+                doomed.push(post.id);
             }
-            PostComment::filter(PostComment::fields().post_id().eq(post.id))
-                .delete()
-                .exec(&mut db)
-                .await?;
-            PostSnapshot::filter(PostSnapshot::fields().post_id().eq(post.id))
-                .delete()
-                .exec(&mut db)
-                .await?;
-            Post::filter_by_id(post.id).delete().exec(&mut db).await?;
         }
     }
+    if !doomed.is_empty() {
+        PostComment::filter(PostComment::fields().post_id().in_list(doomed.clone()))
+            .delete()
+            .exec(&mut db)
+            .await?;
+        PostSnapshot::filter(PostSnapshot::fields().post_id().in_list(doomed.clone()))
+            .delete()
+            .exec(&mut db)
+            .await?;
+        Post::filter(Post::fields().id().in_list(doomed)).delete().exec(&mut db).await?;
+    }
+
+    // URNs in this batch that already belong to someone else. One batched check keeps the old
+    // guarantee — a post is never reassigned between members — without a lookup per post.
+    let batch_urns: Vec<String> = req.posts.iter().map(|post| post.urn.clone()).collect();
+    let foreign: HashSet<String> = if batch_urns.is_empty() {
+        HashSet::new()
+    } else {
+        Post::filter(Post::fields().urn().in_list(batch_urns))
+            .exec(&mut db)
+            .await?
+            .into_iter()
+            .filter(|post| post.member_id != member.id)
+            .map(|post| post.urn)
+            .collect()
+    };
+
+    // Comments already on file for this member's posts, so the upsert below can skip known URNs
+    // without a query per comment.
+    let post_ids: Vec<i64> = stored.values().map(|post| post.id).collect();
+    let mut known_comments: HashSet<String> = if post_ids.is_empty() {
+        HashSet::new()
+    } else {
+        PostComment::filter(PostComment::fields().post_id().in_list(post_ids))
+            .exec(&mut db)
+            .await?
+            .into_iter()
+            .map(|comment| comment.urn)
+            .collect()
+    };
 
     // Upsert each post by URN, then append a metric snapshot.
     let mut ingested = 0usize;
     for p in &req.posts {
+        if foreign.contains(&p.urn) {
+            continue;
+        }
         let text_preview = bounded_post_text(p.text_preview.as_deref());
         let image_urls_json = serde_json::to_string(&bounded_image_urls(&p.image_urls)).ok();
-        let post_id = match Post::filter_by_urn(&p.urn).first().exec(&mut db).await? {
+        let post_id = match stored.get(&p.urn) {
             Some(post) => {
-                // Don't let a post URN be claimed by a different member.
-                if post.member_id != member.id {
-                    continue;
-                }
                 // Backfill a creation time we didn't have before. Posts ingested while the
                 // extension couldn't determine one are stored with 0 and fall back to "first
                 // snapshot", which reads as "posted today"; a later sync repairs them in place.
@@ -257,12 +286,7 @@ pub async fn post(
         // `is_self` is decided here, against the member who owns the post, so scoring never has to
         // re-derive it from a URN comparison that could drift.
         for c in &p.comments {
-            if PostComment::filter_by_urn(&c.urn)
-                .first()
-                .exec(&mut db)
-                .await?
-                .is_some()
-            {
+            if !known_comments.insert(c.urn.clone()) {
                 continue;
             }
             toasty::create!(PostComment {
