@@ -9,6 +9,7 @@ use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use linkedin_challenge_server::auth::{
     account_validation_error, establish_session, hash_password, member_by_email, verify_password,
 };
+use linkedin_challenge_server::enroll::enroll_in_running_challenges;
 use linkedin_challenge_server::models::{ChallengeMembership, Competition, Invite, Member, Org};
 use linkedin_challenge_server::util::{new_bearer_token, now_unix};
 use linkedin_challenge_server::web::{ApiError, ApiResult};
@@ -141,9 +142,10 @@ pub async fn post(
         .exec(&mut db)
         .await?;
 
-    // Enter the org's live competitions, so a new joiner appears on the board without an admin
-    // having to do anything. Finished ones are left alone — you can't retroactively compete.
-    // Admins are entered too: they typically compete as well as organise.
+    // Enter every running challenge too, so a joiner appears on the current board without an
+    // owner having to do anything. Finished ones are left alone — you can't retroactively compete.
+    enroll_in_running_challenges(&mut db, member.id).await?;
+
     let cookie = establish_session(&mut db, member.id).await?;
     let mut headers = HeaderMap::new();
     if let Ok(value) = HeaderValue::from_str(&cookie) {

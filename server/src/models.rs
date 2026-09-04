@@ -167,6 +167,28 @@ pub async fn connect() -> Db {
     )
     .await;
 
+    // Scoring rules that arrived with the LinkedIn Cup: show-up points, weekly consistency and
+    // streak bonuses, the engagement cap, and prize money. Zero defaults keep every existing
+    // challenge scoring exactly as it did before these columns existed.
+    for sql in [
+        "ALTER TABLE competitions ADD COLUMN per_post DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN per_active_week DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN streak_short_weeks BIGINT NOT NULL DEFAULT 4",
+        "ALTER TABLE competitions ADD COLUMN streak_short_bonus DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN streak_long_weeks BIGINT NOT NULL DEFAULT 8",
+        "ALTER TABLE competitions ADD COLUMN streak_long_bonus DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN engagement_cap DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN engagement_over_cap_rate DOUBLE PRECISION NOT NULL DEFAULT 0.5",
+        "ALTER TABLE competitions ADD COLUMN prize_first BIGINT NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN prize_second BIGINT NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN prize_third BIGINT NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN prize_participation BIGINT NOT NULL DEFAULT 0",
+        "ALTER TABLE competitions ADD COLUMN participation_posts BIGINT NOT NULL DEFAULT 0",
+        "ALTER TABLE post_comments ADD COLUMN is_reply BOOLEAN NOT NULL DEFAULT FALSE",
+    ] {
+        add_column(&mut db, sql).await;
+    }
+
     db
 }
 
@@ -297,17 +319,36 @@ pub struct Competition {
     // which is the API shape.
     /// Posts beyond this many per week don't score (only the highest-scoring ones count).
     pub max_posts_per_week: i64,
+    /// "Show up": points per post, up to `max_posts_per_week` a week.
+    pub per_post: f64,
+    /// "Keep showing up": points for every week with at least one post, plus a streak bonus.
+    pub per_active_week: f64,
+    pub streak_short_weeks: i64,
+    pub streak_short_bonus: f64,
+    pub streak_long_weeks: i64,
+    pub streak_long_bonus: f64,
     pub per_reaction: f64,
     pub per_comment: f64,
     pub per_repost: f64,
     pub per_send: f64,
     pub per_save: f64,
     pub per_impression: f64,
+    /// A post's engagement counts fully up to this many points (0 = uncapped), then at
+    /// `engagement_over_cap_rate`.
+    pub engagement_cap: f64,
+    pub engagement_over_cap_rate: f64,
     pub per_follower_gained: f64,
     pub per_profile_view: f64,
-    /// If true, post points are scaled by `follower_baseline / follower_count`.
+    /// If true, engagement points are scaled by `follower_baseline / follower_count`.
     pub normalize_by_followers: bool,
     pub follower_baseline: i64,
+    /// Prize money in whole dollars; 0 means no prize.
+    pub prize_first: i64,
+    pub prize_second: i64,
+    pub prize_third: i64,
+    /// Paid to everyone with at least `participation_posts` posts in the window.
+    pub prize_participation: i64,
+    pub participation_posts: i64,
 
     pub is_active: bool,
     pub created_at: i64,
@@ -412,6 +453,8 @@ pub struct PostComment {
     pub commenter_name: Option<String>,
     /// True when the commenter is the post's own author — these don't score.
     pub is_self: bool,
+    /// True when this is a reply inside a thread rather than a top-level comment.
+    pub is_reply: bool,
     /// Comment creation time (unix secs), 0 when unknown.
     pub created_at: i64,
     /// When we first recorded it.

@@ -46,6 +46,8 @@ export function fmtDate(unix: number): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    // Windows are stored at UTC midnight; local rendering would shift them a day west of GMT.
+    timeZone: "UTC",
   });
 }
 

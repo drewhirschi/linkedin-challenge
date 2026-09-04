@@ -26,6 +26,14 @@ fn bounded_image_urls(urls: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// LinkedIn spells one member several ways (`fs_miniProfile`, `fsd_profile`, `member`); the id
+/// after the last colon is the stable part, so that is what "is this my own comment?" compares.
+fn same_person(a: &str, b: &str) -> bool {
+    let tail = |urn: &str| urn.rsplit(':').next().unwrap_or("").trim_matches(|c| c == '(' || c == ')').to_string();
+    let (ta, tb) = (tail(a), tail(b));
+    !ta.is_empty() && ta == tb
+}
+
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncRequest {
@@ -73,6 +81,9 @@ pub struct CommentPayload {
     pub commenter_urn: String,
     pub commenter_name: Option<String>,
     pub created_at: Option<String>,
+    /// True for a reply inside a thread rather than a top-level comment.
+    #[serde(default)]
+    pub is_reply: bool,
 }
 
 #[derive(Default, Deserialize, Serialize, ToSchema)]
@@ -259,7 +270,8 @@ pub async fn post(
                 urn: &c.urn,
                 commenter_urn: &c.commenter_urn,
                 commenter_name: c.commenter_name.clone(),
-                is_self: c.commenter_urn == member.linkedin_urn,
+                is_self: same_person(&c.commenter_urn, &member.linkedin_urn),
+                is_reply: c.is_reply,
                 created_at: c.created_at.as_deref().and_then(parse_iso8601).unwrap_or(0),
                 captured_at,
             })

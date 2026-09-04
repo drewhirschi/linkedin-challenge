@@ -13,7 +13,8 @@ use crate::models::{
     ChallengeMembership, Competition, Invite, Member, Org, Post, PostComment, PostSnapshot,
 };
 use crate::scoring::{
-    ScoringConfig, Standing, WEEK_SECONDS, active_competition, compute_standings,
+    Engagement, ScoringConfig, Standing, WEEK_SECONDS, active_competition, compute_standings,
+    current_week,
 };
 use crate::util::now_unix;
 use crate::web::{ApiError, ApiResult};
@@ -57,11 +58,26 @@ pub struct StandingRow {
     pub display_name: String,
     pub profile_url: Option<String>,
     pub follower_count: i64,
+    /// Followers gained across the window so far.
+    pub follower_growth: i64,
+    /// "Show up": points for posting, up to the weekly cap.
+    pub show_up_points: f64,
+    /// "Keep showing up": active-week points plus the streak bonus.
+    pub consistency_points: f64,
+    /// Engagement points after the cap and follower scaling.
+    pub engagement_points: f64,
+    /// `show_up + engagement` — everything the posts themselves earned.
     pub post_points: f64,
     pub profile_points: f64,
     pub total: f64,
+    /// Points earned in the current scoring week.
+    pub week_points: f64,
     pub graded_posts: usize,
     pub total_posts: usize,
+    pub active_weeks: u32,
+    /// Consecutive active weeks running up to now.
+    pub streak_weeks: u32,
+    pub best_streak_weeks: u32,
 }
 
 impl StandingRow {
@@ -72,13 +88,64 @@ impl StandingRow {
             display_name: s.display_name,
             profile_url: s.profile_url,
             follower_count: s.follower_count,
+            follower_growth: s.follower_growth,
+            show_up_points: s.show_up_points,
+            consistency_points: s.consistency_points,
+            engagement_points: s.engagement_points,
             post_points: s.post_points,
             profile_points: s.profile_points,
             total: s.total,
+            week_points: s.week_points,
             graded_posts: s.graded_posts,
             total_posts: s.total_posts,
+            active_weeks: s.active_weeks,
+            streak_weeks: s.streak_weeks,
+            best_streak_weeks: s.best_streak_weeks,
         }
     }
+}
+
+/// Where the challenge is in its calendar.
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Season {
+    /// 1-based scoring week that today falls in (clamped to the window).
+    pub week: i64,
+    pub weeks: i64,
+    /// 0–1 share of the window elapsed.
+    pub progress: f64,
+    /// When the server computed this board (unix seconds).
+    pub as_of: i64,
+}
+
+/// How the whole company is doing — the "as a company so far" strip. Visible to every member.
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CompanyStats {
+    /// Members of the challenge.
+    pub members: usize,
+    /// Members with at least one post inside the window.
+    pub members_posting: usize,
+    /// Comments other people left on in-window posts.
+    pub comments_sparked: i64,
+    /// Sum of every scoring member's latest follower count.
+    pub follower_reach: i64,
+}
+
+/// One of the week's standout posts.
+#[derive(Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TopPost {
+    pub post_id: i64,
+    pub member_id: i64,
+    pub display_name: String,
+    pub permalink: String,
+    pub text_preview: Option<String>,
+    pub posted_at: i64,
+    pub comments: i64,
+    pub reactions: i64,
+    /// Engagement points before follower scaling — what makes it a top post.
+    pub points: f64,
 }
 
 /// The org's challenges, newest first, with the one the app shows by default.
@@ -98,6 +165,14 @@ pub struct Leaderboard {
     /// The org's other challenges, for the board's switcher.
     pub challenges: Vec<CompetitionInfo>,
     pub standings: Vec<StandingRow>,
+    /// The viewer's own row, when they are scoring.
+    pub viewer: Option<StandingRow>,
+    pub viewer_member_id: i64,
+    pub viewer_name: String,
+    pub season: Option<Season>,
+    pub company: Option<CompanyStats>,
+    /// The current week's three most-engaged posts.
+    pub top_posts: Vec<TopPost>,
     /// Always None here — see `aggregate_for`, which an admin-only endpoint serves separately so
     /// the board itself stays the same for every reader.
     pub aggregate: Option<Aggregate>,
@@ -425,8 +500,30 @@ pub async fn leaderboard(
         Some(c) => rank(compute_standings(db, c).await?),
         None => Vec::new(),
     };
+    let viewer = standings.iter().find(|s| s.member_id == member.id).map(clone_row);
+
+    let now = now_unix();
+    let season = comp.as_ref().map(|c| Season {
+        week: current_week(c, now) + 1,
+        weeks: ScoringConfig::weeks_in(c.start_at, c.end_at),
+        progress: ((now - c.start_at) as f64 / (c.end_at - c.start_at).max(1) as f64).clamp(0.0, 1.0),
+        as_of: now,
+    });
+    let (company, top_posts) = match &comp {
+        Some(c) => {
+            let (company, top) = company_stats(db, c, &standings, now).await?;
+            (Some(company), top)
+        }
+        None => (None, Vec::new()),
+    };
 
     Ok(Leaderboard {
+        viewer,
+        viewer_member_id: member.id,
+        viewer_name: member.display_name.clone(),
+        season,
+        company,
+        top_posts,
         competition: comp.as_ref().map(|challenge| {
             let mut info = CompetitionInfo::new(challenge);
             info.is_owner = memberships.iter().any(|membership| {
@@ -441,6 +538,113 @@ pub async fn leaderboard(
         standings,
         aggregate: None,
     })
+}
+
+fn clone_row(s: &StandingRow) -> StandingRow {
+    StandingRow {
+        rank: s.rank,
+        member_id: s.member_id,
+        display_name: s.display_name.clone(),
+        profile_url: s.profile_url.clone(),
+        follower_count: s.follower_count,
+        follower_growth: s.follower_growth,
+        show_up_points: s.show_up_points,
+        consistency_points: s.consistency_points,
+        engagement_points: s.engagement_points,
+        post_points: s.post_points,
+        profile_points: s.profile_points,
+        total: s.total,
+        week_points: s.week_points,
+        graded_posts: s.graded_posts,
+        total_posts: s.total_posts,
+        active_weeks: s.active_weeks,
+        streak_weeks: s.streak_weeks,
+        best_streak_weeks: s.best_streak_weeks,
+    }
+}
+
+/// Company-wide totals every member may see, plus this week's top three posts. One pass over
+/// every member's in-window posts serves both.
+async fn company_stats(
+    db: &mut Db,
+    comp: &Competition,
+    standings: &[StandingRow],
+    now: i64,
+) -> ApiResult<(CompanyStats, Vec<TopPost>)> {
+    let cfg = ScoringConfig::from_competition(comp);
+    let memberships =
+        ChallengeMembership::filter(ChallengeMembership::fields().challenge_id().eq(comp.id))
+            .exec(&mut *db)
+            .await?;
+    let week = current_week(comp, now);
+    let week_start = comp.start_at + week * WEEK_SECONDS;
+    let week_end = (week_start + WEEK_SECONDS - 1).min(comp.end_at);
+
+    let mut members_posting = 0usize;
+    let mut comments_sparked = 0i64;
+    let mut top: Vec<TopPost> = Vec::new();
+    for membership in &memberships {
+        let Some(member) = Member::filter_by_id(membership.member_id)
+            .first()
+            .exec(&mut *db)
+            .await?
+        else {
+            continue;
+        };
+        let posts = Post::filter(Post::fields().member_id().eq(member.id))
+            .exec(&mut *db)
+            .await?;
+        let mut posted = false;
+        for post in &posts {
+            let (stat, posted_at) = post_stats(db, post).await?;
+            if posted_at < comp.start_at || posted_at > comp.end_at {
+                continue;
+            }
+            posted = true;
+            comments_sparked += stat.comments_by_others;
+            if posted_at >= week_start && posted_at <= week_end {
+                let points = cfg.post_engagement(&Engagement {
+                    reactions: stat.reactions,
+                    comments: stat.comments_by_others,
+                    reposts: stat.reposts,
+                    sends: stat.sends,
+                    saves: stat.saves,
+                    impressions: stat.impressions,
+                });
+                top.push(TopPost {
+                    post_id: post.id,
+                    member_id: member.id,
+                    display_name: member.display_name.clone(),
+                    permalink: post.permalink.clone(),
+                    text_preview: stat.text_preview.clone(),
+                    posted_at,
+                    comments: stat.comments_by_others,
+                    reactions: stat.reactions,
+                    points,
+                });
+            }
+        }
+        if posted {
+            members_posting += 1;
+        }
+    }
+    top.sort_by(|a, b| {
+        b.points
+            .partial_cmp(&a.points)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| b.posted_at.cmp(&a.posted_at))
+    });
+    top.truncate(3);
+
+    Ok((
+        CompanyStats {
+            members: memberships.len(),
+            members_posting,
+            comments_sparked,
+            follower_reach: standings.iter().map(|s| s.follower_count).sum(),
+        },
+        top,
+    ))
 }
 
 /// Standings plus totals for one challenge — the admin view of a board.

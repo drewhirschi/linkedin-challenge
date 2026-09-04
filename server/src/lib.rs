@@ -3,6 +3,7 @@
 
 pub mod auth;
 pub mod dto;
+pub mod enroll;
 pub mod models;
 pub mod scoring;
 pub mod seed;

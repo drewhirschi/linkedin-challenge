@@ -3,6 +3,7 @@
 import { useGetAdminOverview, useCreateChallenge, getGetAdminOverviewQueryKey } from "@linkedin-challenge/client/react-query";
 import type { ScoringConfig } from "@linkedin-challenge/client";
 import { fmtDate } from "../../../components/format";
+import { ScoringFields } from "../../../components/challenge-form";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -10,30 +11,6 @@ function isoDate(offsetDays = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
   return d.toISOString().slice(0, 10);
-}
-
-function NumberField({
-  label,
-  value,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  step: string;
-  onChange: (n: number) => void;
-}) {
-  return (
-    <label className="field" style={{ margin: 0 }}>
-      <span>{label}</span>
-      <input
-        type="number"
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </label>
-  );
 }
 
 function NewChallenge({
@@ -53,8 +30,6 @@ function NewChallenge({
   const [cfg, setCfg] = useState<ScoringConfig>(defaults);
   const [error, setError] = useState<string | null>(null);
   const create = useCreateChallenge();
-
-  const set = (patch: Partial<ScoringConfig>) => setCfg({ ...cfg, ...patch });
 
   if (!open) return null;
 
@@ -115,95 +90,7 @@ function NewChallenge({
             </label>
           </div>
 
-          <h4 className="muted small" style={{ margin: "14px 0 8px" }}>
-            POST ENGAGEMENT POINTS
-          </h4>
-          <div className="grid cols-2">
-            <NumberField
-              label="Max posts graded / week"
-              value={cfg.maxPostsPerWeek}
-              step="1"
-              onChange={(n) => set({ maxPostsPerWeek: n })}
-            />
-            <NumberField
-              label="Points per impression"
-              value={cfg.perImpression}
-              step="0.001"
-              onChange={(n) => set({ perImpression: n })}
-            />
-            <NumberField
-              label="Points per reaction"
-              value={cfg.perReaction}
-              step="0.1"
-              onChange={(n) => set({ perReaction: n })}
-            />
-            <NumberField
-              label="Points per comment"
-              value={cfg.perComment}
-              step="0.1"
-              onChange={(n) => set({ perComment: n })}
-            />
-            <NumberField
-              label="Points per repost"
-              value={cfg.perRepost}
-              step="0.1"
-              onChange={(n) => set({ perRepost: n })}
-            />
-            <NumberField
-              label="Points per send"
-              value={cfg.perSend}
-              step="0.1"
-              onChange={(n) => set({ perSend: n })}
-            />
-            <NumberField
-              label="Points per save"
-              value={cfg.perSave}
-              step="0.1"
-              onChange={(n) => set({ perSave: n })}
-            />
-          </div>
-
-          <h4 className="muted small" style={{ margin: "14px 0 8px" }}>
-            PROFILE POINTS
-          </h4>
-          <div className="grid cols-2">
-            <NumberField
-              label="Points per follower gained"
-              value={cfg.perFollowerGained}
-              step="0.1"
-              onChange={(n) => set({ perFollowerGained: n })}
-            />
-            <NumberField
-              label="Points per profile view"
-              value={cfg.perProfileView}
-              step="0.1"
-              onChange={(n) => set({ perProfileView: n })}
-            />
-          </div>
-
-          <h4 className="muted small" style={{ margin: "14px 0 8px" }}>
-            NORMALIZATION
-          </h4>
-          <div className="grid cols-2">
-            <label
-              className="field"
-              style={{ margin: 0, display: "flex", gap: 8, alignItems: "center" }}
-            >
-              <input
-                type="checkbox"
-                checked={cfg.normalizeByFollowers}
-                onChange={(e) => set({ normalizeByFollowers: e.target.checked })}
-                style={{ width: "auto" }}
-              />
-              <span style={{ margin: 0 }}>Normalize post points by follower count</span>
-            </label>
-            <NumberField
-              label="Follower baseline"
-              value={cfg.followerBaseline}
-              step="1"
-              onChange={(n) => set({ followerBaseline: n })}
-            />
-          </div>
+          <ScoringFields cfg={cfg} onChange={setCfg} />
 
           <p style={{ marginTop: 16, display: "flex", gap: 8 }}>
             <button type="submit" disabled={create.isPending}>

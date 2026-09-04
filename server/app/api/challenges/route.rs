@@ -4,6 +4,7 @@
 use axum::{Extension, Json};
 use http::HeaderMap;
 use linkedin_challenge_server::dto::{ChallengeList, challenge_list, require_member};
+use linkedin_challenge_server::enroll::enroll_everyone;
 use linkedin_challenge_server::models::{ChallengeMembership, Competition};
 use linkedin_challenge_server::scoring::ScoringConfig;
 use linkedin_challenge_server::util::{now_unix, parse_date};
@@ -60,16 +61,29 @@ pub async fn post(
         start_at: start,
         end_at: end,
         max_posts_per_week: req.config.max_posts_per_week as i64,
+        per_post: req.config.per_post,
+        per_active_week: req.config.per_active_week,
+        streak_short_weeks: req.config.streak_short_weeks as i64,
+        streak_short_bonus: req.config.streak_short_bonus,
+        streak_long_weeks: req.config.streak_long_weeks as i64,
+        streak_long_bonus: req.config.streak_long_bonus,
         per_reaction: req.config.per_reaction,
         per_comment: req.config.per_comment,
         per_repost: req.config.per_repost,
         per_send: req.config.per_send,
         per_save: req.config.per_save,
         per_impression: req.config.per_impression,
+        engagement_cap: req.config.engagement_cap,
+        engagement_over_cap_rate: req.config.engagement_over_cap_rate,
         per_follower_gained: req.config.per_follower_gained,
         per_profile_view: req.config.per_profile_view,
         normalize_by_followers: req.config.normalize_by_followers,
         follower_baseline: req.config.follower_baseline,
+        prize_first: req.config.prize_first,
+        prize_second: req.config.prize_second,
+        prize_third: req.config.prize_third,
+        prize_participation: req.config.prize_participation,
+        participation_posts: req.config.participation_posts,
         is_active: true,
         created_at: now_unix(),
     }).exec(&mut db).await?;
@@ -80,5 +94,9 @@ pub async fn post(
         is_favorite: true,
         joined_at: now_unix(),
     }).exec(&mut db).await?;
+    // A challenge that is already running takes everyone on board right away.
+    if start <= now_unix() {
+        enroll_everyone(&mut db).await?;
+    }
     Ok(Json(CreateChallengeResponse { id: challenge.id }))
 }

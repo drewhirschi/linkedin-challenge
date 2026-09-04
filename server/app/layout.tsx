@@ -105,7 +105,10 @@ function Sidebar() {
                         <SideLink href={base} pathname={pathname} nested>Leaderboard</SideLink>
                         <SideLink href={`${base}/scoring`} pathname={pathname} nested>How scoring works</SideLink>
                         {challenge.isOwner && (
-                          <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>
+                          <>
+                            <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>
+                            <SideLink href={`${base}/settings`} pathname={pathname} nested>Settings</SideLink>
+                          </>
                         )}
                       </>
                     )}

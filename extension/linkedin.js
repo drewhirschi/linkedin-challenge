@@ -327,6 +327,106 @@ async function getPostFeed(memberUrn) {
 // post. `numImpressions` on SocialActivityCounts supplies the same number in the response we
 // already fetch, so the whole path is gone.
 
+// ---- comments -------------------------------------------------------------
+
+// Who commented on a post. Voyager's comments surface is normalized like everything else: each
+// comment is an entity in `included` carrying its own URN, the commenter's profile URN, and
+// (for replies) the parent comment's URN. We report authorship so the server can leave the
+// author's own replies unscored — a thread where you answer every comment shouldn't double your
+// points. Best-effort like the other collectors: any failure returns an empty list, which the
+// server treats as "didn't read comments this time", never as "no comments".
+export async function getPostComments(activityUrn, { max = 100 } = {}) {
+  const id = activityId(activityUrn);
+  if (!id) return [];
+  const out = [];
+  try {
+    let start = 0;
+    while (out.length < max) {
+      const count = Math.min(50, max - out.length);
+      const json = await voyagerFetch(
+        `/feed/comments?count=${count}&start=${start}&q=comments&sortOrder=RELEVANCE` +
+          `&updateId=activity:${id}`,
+      );
+      const page = extractComments(json);
+      for (const comment of page) out.push(comment);
+      if (page.length < count) break;
+      start += count;
+      await sleep(REQUEST_DELAY_MS);
+    }
+  } catch {
+    // Return what we managed to read; an empty list is the "unknown" signal.
+  }
+  return dedupeByUrn(out);
+}
+
+const COMMENT_URN = /urn:li:comment:\([^)]*\)|urn:li:comment:[^",\s]+/;
+
+function extractComments(json) {
+  const isComment = (e) =>
+    e &&
+    (String(e.$type || "").endsWith("Comment") ||
+      String(e.entityUrn || "").includes("urn:li:comment:")) &&
+    (e.commenter || e.commenterProfileId || e["*commenter"] || e.actor);
+  const comments = [];
+  for (const entity of allWith(json, isComment)) {
+    const serialized = JSON.stringify(entity);
+    const urn =
+      (typeof entity.urn === "string" && entity.urn.startsWith("urn:li:comment:") && entity.urn) ||
+      (typeof entity.entityUrn === "string" && entity.entityUrn.match(COMMENT_URN)?.[0]) ||
+      serialized.match(COMMENT_URN)?.[0];
+    if (!urn) continue;
+
+    // The commenter: a nested mini profile, a dash profile reference, or an actor block.
+    const commenter =
+      entity.commenter?.["com.linkedin.voyager.feed.MemberActor"]?.miniProfile ||
+      entity.commenter?.miniProfile ||
+      entity.commenter?.member ||
+      entity.commenter ||
+      entity.actor ||
+      {};
+    const commenterUrn =
+      commenter.entityUrn ||
+      commenter.objectUrn ||
+      commenter["*miniProfile"] ||
+      commenter.urn ||
+      entity["*commenter"] ||
+      entity.commenterProfileId ||
+      serialized.match(/urn:li:(?:fs_miniProfile|fsd_profile|member):[^",\s]+/)?.[0] ||
+      null;
+    if (!commenterUrn) continue;
+
+    const first = commenter.firstName?.text ?? commenter.firstName ?? "";
+    const last = commenter.lastName?.text ?? commenter.lastName ?? "";
+    const name =
+      commenter.name?.text ??
+      commenter.name ??
+      [first, last].filter((part) => typeof part === "string" && part).join(" ");
+    const parent = entity.parentCommentUrn || entity["*parentComment"] || null;
+    const created =
+      typeof entity.createdTime === "number"
+        ? new Date(entity.createdTime).toISOString()
+        : typeof entity.createdAt === "number"
+          ? new Date(entity.createdAt).toISOString()
+          : null;
+
+    comments.push({
+      urn,
+      commenterUrn: String(commenterUrn),
+      commenterName: typeof name === "string" && name ? name : null,
+      createdAt: created,
+      isReply: Boolean(parent),
+    });
+  }
+  return comments;
+}
+
+// A member's own identity can surface under several URN schemes (`fs_miniProfile`, `fsd_profile`,
+// `member`); the stable part is the trailing id. Comparing on that keeps "is this my own
+// comment?" correct whichever shape a given response uses.
+export function urnTail(urn) {
+  return String(urn || "").split(":").pop() || "";
+}
+
 // ---- parsing helpers ------------------------------------------------------
 
 function extractActivityUrn(s) {
@@ -601,6 +701,14 @@ export async function collectSnapshot() {
     const analytics = await getPostAnalytics(post.urn);
     post.metrics = { ...post.metrics, ...analytics };
     await sleep(REQUEST_DELAY_MS);
+    // Who commented, so the author's own replies can be left out of the score. Only worth a
+    // request when LinkedIn says there is something to read.
+    if ((post.metrics.comments ?? 0) > 0) {
+      post.comments = await getPostComments(post.urn);
+      await sleep(REQUEST_DELAY_MS);
+    } else {
+      post.comments = [];
+    }
   }
 
   return {

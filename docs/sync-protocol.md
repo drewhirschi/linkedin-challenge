@@ -63,11 +63,27 @@ Content-Type: application/json
         "reactions": 45,
         "comments": 12,
         "reposts": 3
-      }
+      },
+      "comments": [                 // who commented; [] means "didn't read them", not "none"
+        {
+          "urn": "urn:li:comment:(urn:li:activity:7231000000000000000,7231000000000000001)",
+          "commenterUrn": "urn:li:fsd_profile:ACoAAB...",
+          "commenterName": "Sam Example",
+          "createdAt": "2026-08-02T10:00:00Z",
+          "isReply": false          // true inside a thread (a reply to a comment)
+        }
+      ]
     }
   ]
 }
 ```
+
+Comments are read from `GET /voyager/api/feed/comments?q=comments&updateId=activity:{id}` (best
+effort, paged 50 at a time, only when the post's comment count is non-zero). The server stores
+each comment once by URN and marks `isSelf` when the commenter is the post's author — comparing
+the id after the last colon, since LinkedIn spells one member as `fs_miniProfile`, `fsd_profile`,
+or `member` depending on the surface. Scoring counts only comments by other people; when no
+comment rows have been read for a post it falls back to LinkedIn's `metrics.comments` total.
 
 Response `200`:
 
