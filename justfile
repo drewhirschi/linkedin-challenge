@@ -20,6 +20,14 @@ doctor:
 dev:
     cd server && DATABASE_URL=turso:linkedin.db cargo dev
 
+# Release only: a debug build would seed the local test account into production. Startup applies
+# the additive schema migrations, exactly as a deploy would.
+# Run a release build locally against the PRODUCTION database (credentials from server/.env.local).
+run-prod:
+    cd server && test -f .env.local || { echo "missing server/.env.local (run: vercel env pull .env.local)" >&2; exit 1; }
+    cd server && cargo build --release --bin linkedin-challenge-server
+    cd server && set -a && . ./.env.local && set +a && DATABASE_URL="$DATABASE_URL_UNPOOLED" PORT=3312 ./target/release/linkedin-challenge-server
+
 # Ensure the local account and Q3 World Cup challenge exist without resetting synced data.
 seed-local:
     cd server && DATABASE_URL=turso:linkedin.db cargo run --bin seed-local
