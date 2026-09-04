@@ -308,6 +308,11 @@ ul.plain li:last-child { border-bottom: none; }
 body:has(.cup) { background: #fbf9f1; }
 main:has(.cup) { max-width: 1200px; }
 .cup {
+  /* Breakpoints below are container queries against the board's own width — the sidebar takes
+     232px of the viewport, so a 950px window leaves a ~700px board that must lay out like a
+     tablet, not a desktop. */
+  container-type: inline-size;
+  container-name: cup;
   --cup-ink: #0b2b2b; --cup-teal: #0d7c7c; --cup-deep: #0f3d3d; --cup-lime: #d5f79a;
   --cup-gold: #e3bc4a; --cup-gold-dark: #c99a1e; --cup-plum: #5b1d55; --cup-pink: #f9a8f0;
   --cup-cream: #fbf9f1; --cup-card: #ffffff; --cup-line: #e8e4d6; --cup-muted: #5c6b6b;
@@ -503,14 +508,14 @@ main:has(.cup) { max-width: 1200px; }
 .cup-foot strong { color: var(--cup-ink); }
 .rules-list li { margin-bottom: 8px; }
 
-@media (max-width: 900px) {
+@container cup (max-width: 900px) {
   .cup-columns { grid-template-columns: 1fr; }
   .cup-stats { grid-template-columns: 1fr; }
   .cup-me { padding: 22px; }
   .cup-me .head { flex-direction: column; }
   .cup-me .points { text-align: left; }
-  .cup-row { grid-template-columns: 32px 48px minmax(0, 1fr); }
-  .cup-row .total { grid-column: 3; text-align: left; }
+  .cup-row { grid-template-columns: 36px 56px minmax(0, 1fr) auto; gap: 14px; padding: 18px 20px; }
+  .cup-row .cup-avatar { width: 56px !important; height: 56px !important; font-size: 19px !important; }
   .cup-nudge { flex-direction: column; align-items: flex-start; }
   .cup-list li { grid-template-columns: 24px 36px minmax(0, 1fr) auto; }
   .cup-list li a { grid-column: 3 / -1; }
@@ -536,6 +541,8 @@ main:has(.cup) { max-width: 1200px; }
 
 @media (max-width: 600px) {
   main:has(.cup) { padding: 14px 12px 40px; }
+}
+@container cup (max-width: 600px) {
   .cup-live { justify-content: center; font-size: 12px; }
   .cup-hero { padding-top: 16px; }
   .cup-trophy { width: 92px; height: 92px; }

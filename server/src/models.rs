@@ -188,6 +188,23 @@ pub async fn connect() -> Db {
     ] {
         add_column(&mut db, sql).await;
     }
+    // Challenges that predate these columns have every new rate at zero, which is not a rule set
+    // anyone chose — it is the absence of one. Give them the LinkedIn Cup rules once; a challenge
+    // whose owner has saved settings has at least one non-zero value and is never touched.
+    execute_migration(
+        &mut db,
+        "UPDATE competitions SET per_post = 10, per_active_week = 20, streak_short_weeks = 4, \
+         streak_short_bonus = 25, streak_long_weeks = 8, streak_long_bonus = 75, \
+         per_reaction = 0.2, per_comment = 5, per_repost = 0, per_send = 0, per_save = 0, \
+         per_impression = 0, engagement_cap = 150, engagement_over_cap_rate = 0.5, \
+         per_follower_gained = 0, per_profile_view = 0, normalize_by_followers = TRUE, \
+         follower_baseline = 1000, prize_first = 2500, prize_second = 1500, prize_third = 1000, \
+         prize_participation = 250, participation_posts = 20 \
+         WHERE per_post = 0 AND per_active_week = 0 AND streak_short_bonus = 0 \
+         AND streak_long_bonus = 0 AND engagement_cap = 0 AND prize_first = 0 \
+         AND prize_participation = 0",
+    )
+    .await;
 
     db
 }
