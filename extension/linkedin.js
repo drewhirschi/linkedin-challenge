@@ -362,29 +362,309 @@ export function ownFollowingInfo(json, memberUrn) {
 
 // ---- comments -------------------------------------------------------------
 
-// Who commented on a post.
+// Every comment on a post, with its author.
 //
-// Voyager's comment endpoints (`/feed/comments`, `/feed/dash/comments`, the GraphQL surface) all
-// answer 400/404 for the current site, so this reads the server-rendered post page instead — the
-// same approach the analytics collector uses. Each comment is rendered as a component whose id
-// carries the comment URN, and the block under it carries the commenter's profile link and an
-// aria-label naming them. We report the commenter as a public-identifier URN (the page exposes no
-// member URN), which the server matches against the account's own identifier.
+// The post page renders only the first handful of comments, and Voyager's comment endpoints
+// (`/feed/comments`, `/feed/dash/comments`, the GraphQL surface) answer 400/404 for the current
+// site. What LinkedIn's own page uses is its server-driven UI: a POST to the `pagedComments`
+// pager, which streams back the comment list as React Flight (the `id:json` chunk format React
+// Server Components use). Threads with collapsed replies carry a `fetchReplies` ServerRequest in
+// that stream; replaying it fetches the hidden replies the same way. Together they yield the whole
+// thread, which is what "one point per person who commented" needs — the page's first few would
+// miss anyone who only replied further down.
 //
-// The page renders only the first several comments, so the server treats this list as "comments
-// we saw", never as the total: LinkedIn's count on the post still governs, minus the author's own
-// comments seen here. Best-effort like the other collectors: any failure returns an empty list.
-export async function getPostComments(activityUrn, { max = 100 } = {}) {
+// The page embeds the exact next-page request it will send (`nextPageRequest`): the thread key
+// (an activity for a normal post, the original ugcPost for a repost), a tracking id, and a page
+// token that is a session id plus an offset. We take that verbatim, reset the offset to zero and
+// ask for a large page; the server honours the size when the token is genuine. Without a page
+// token it caps at ~20 and ignores the thread key, so a synthetic request is only the fallback.
+// Body shape was established by bisection against the real request (docs/linkedin-scraping.md):
+// everything is optional except `clientArguments.states: []`. Best-effort like the other
+// collectors: on failure we fall back to the rendered page, and that failing returns [].
+const COMMENTS_PAGER = "com.linkedin.sdui.pagers.feed.pagedComments";
+const REPLIES_REQUEST = "com.linkedin.sdui.feed.update.comments.fetchReplies";
+const COMMENT_PAGE_SIZE = 250;
+const COMMENT_MAX_PAGES = 4;
+
+export async function getPostComments(activityUrn, { max = 1000 } = {}) {
   const id = activityId(activityUrn);
   if (!id) return [];
+  let html = null;
   try {
     const res = await linkedinFetch(`/feed/update/urn:li:activity:${id}/`);
-    return parseRenderedComments(await res.text(), max);
+    html = await res.text();
+  } catch (error) {
+    if (String(error?.message) === "NOT_LOGGED_IN") throw error;
+  }
+  try {
+    const comments = await getPostCommentsSdui(id, html, max);
+    if (comments.length > 0) return comments;
+  } catch (error) {
+    if (String(error?.message) === "NOT_LOGGED_IN") throw error;
+  }
+  return html ? parseRenderedComments(html, max) : [];
+}
+
+async function sduiPost(path, body) {
+  const res = await linkedinFetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-li-rsc-stream": "true" },
+    body: JSON.stringify(body),
+  });
+  return res.text();
+}
+
+// The page's own `nextPageRequest`, or null. It is JSON escaped inside a JS string literal, so
+// brace-match while honouring `\"` string boundaries, then unescape and parse.
+export function embeddedNextPageRequest(html) {
+  const at = html.indexOf('\\"nextPageRequest\\":');
+  if (at < 0) return null;
+  const open = html.indexOf("{", at);
+  if (open < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let end = -1;
+  for (let j = open; j < html.length; j++) {
+    const ch = html[j];
+    if (inString) {
+      if (ch === "\\" && html[j + 1] === "\\") j++;
+      else if (ch === "\\" && html[j + 1] === '"') {
+        inString = false;
+        j++;
+      }
+      continue;
+    }
+    if (ch === "\\" && html[j + 1] === '"') {
+      inString = true;
+      j++;
+    } else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        end = j + 1;
+        break;
+      }
+    }
+  }
+  if (end < 0) return null;
+  // Unescape one level: `\\` -> `\` and `\"` -> `"`, without letting the first rewrite feed the second.
+  const placeholder = "__BACKSLASH__";
+  const unescaped = html
+    .slice(open, end)
+    .replace(/\\\\/g, placeholder)
+    .replace(/\\"/g, '"')
+    .split(placeholder)
+    .join("\\");
+  try {
+    const request = JSON.parse(unescaped);
+    return request?.pagerId === COMMENTS_PAGER && request.requestedArguments?.payload?.pageToken ? request : null;
   } catch {
-    return [];
+    return null;
   }
 }
 
+// A page token is a protobuf: a session string, then field 2 (tag 0x10) holding the offset as a
+// varint. Offsets we use stay below 128, so the varint is one byte.
+function tokenWithOffset(token, offset) {
+  const bytes = Uint8Array.from(atob(token), (c) => c.charCodeAt(0));
+  const tag = bytes.lastIndexOf(0x10);
+  if (tag < 0) return token;
+  const out = new Uint8Array(tag + 2);
+  out.set(bytes.subarray(0, tag + 1));
+  out[tag + 1] = offset;
+  return btoa(String.fromCharCode(...out));
+}
+
+function syntheticPayload(activityId) {
+  return {
+    threadUrn: { threadUrnActivityThreadUrn: { activityUrn: { activityId } } },
+    updateKey: {
+      feedType: 3,
+      items: [{ feedUpdateUrn: { updateUrnActivityUrn: { activityUrn: { activityId } } }, trackingId: "AAAAAAAAAAAAAAAAAAAAAA==" }],
+      aggregationType: 0,
+      isVideoCarousel: false,
+    },
+    sortOrder: "CommentSortOrder_RELEVANCE",
+  };
+}
+
+async function getPostCommentsSdui(activityId, html, max) {
+  const embedded = html ? embeddedNextPageRequest(html) : null;
+  const base = embedded ? embedded.requestedArguments.payload : syntheticPayload(activityId);
+  const token = embedded ? base.pageToken : null;
+
+  const byUrn = new Map();
+  const replyRequests = new Map();
+  for (let page = 0; page < COMMENT_MAX_PAGES && byUrn.size < max; page++) {
+    const offset = page * COMMENT_PAGE_SIZE;
+    if (page > 0 && !token) break; // the synthetic request cannot page
+    const payload = {
+      ...base,
+      pageSize: COMMENT_PAGE_SIZE,
+      subsequentPageSize: COMMENT_PAGE_SIZE,
+      numCommentsDisplayed: offset,
+      ...(token ? { pageToken: tokenWithOffset(token, offset) } : {}),
+    };
+    const requestedArguments = { $type: "proto.sdui.actions.requests.RequestedArguments", requestedStateKeys: [], payload };
+    if (page > 0) await sleep(REQUEST_DELAY_MS);
+    const text = await sduiPost(`/flagship-web/rsc-action/actions/pagination?sduiid=${COMMENTS_PAGER}`, {
+      pagerId: COMMENTS_PAGER,
+      clientArguments: { ...requestedArguments, states: [] },
+      paginationRequest: { $type: "proto.sdui.actions.requests.PaginationRequest", pagerId: COMMENTS_PAGER, requestedArguments },
+    });
+    const chunks = parseFlight(text);
+    let added = 0;
+    for (const c of commentsFromFlight(chunks)) {
+      if (!byUrn.has(c.urn)) {
+        byUrn.set(c.urn, c);
+        added++;
+      }
+    }
+    // Collapsed reply threads: the stream includes the exact request the "see previous replies"
+    // button would send. Collect each once (they repeat per render pass).
+    walkFlight(chunks, (node) => {
+      if (node && node.$type === "proto.sdui.actions.core.ServerRequest" && node.value?.requestId === REPLIES_REQUEST) {
+        const key = node.value.requestedArguments?.payload?.anchorId || JSON.stringify(node.value.requestedArguments?.payload?.parentCommentUrn);
+        if (key && !replyRequests.has(key)) replyRequests.set(key, node.value);
+      }
+    });
+    if (added < COMMENT_PAGE_SIZE) break; // an under-full page is the last one
+  }
+
+  for (const request of replyRequests.values()) {
+    if (byUrn.size >= max) break;
+    await sleep(REQUEST_DELAY_MS);
+    try {
+      const text = await sduiPost(`/flagship-web/rsc-action/actions/server-request?sduiid=${REPLIES_REQUEST}`, {
+        requestId: REPLIES_REQUEST,
+        serverRequest: { requestId: REPLIES_REQUEST, requestedArguments: request.requestedArguments },
+        states: [],
+        requestedArguments: { ...request.requestedArguments, states: [] },
+      });
+      for (const c of commentsFromFlight(parseFlight(text))) if (!byUrn.has(c.urn)) byUrn.set(c.urn, c);
+    } catch {
+      // A thread we could not expand only costs its hidden replies; keep what we have.
+    }
+  }
+  return [...byUrn.values()].slice(0, max);
+}
+
+// React Flight stream -> Map of chunk id -> parsed value. Each line is `id:payload`; a `T` payload
+// is raw text of the given hex byte length (may span lines); `I`/`H`/`E` payloads are module and
+// hint records we keep only so references resolve. Elements are `["$", type, key, props]` arrays
+// and `"$<id>"` / `"$L<id>"` strings reference other chunks.
+export function parseFlight(text) {
+  const chunks = new Map();
+  const bytes = new TextEncoder();
+  let i = 0;
+  while (i < text.length) {
+    const colon = text.indexOf(":", i);
+    if (colon < 0) break;
+    const id = text.slice(i, colon);
+    if (text[colon + 1] === "T") {
+      const comma = text.indexOf(",", colon + 2);
+      const byteLength = parseInt(text.slice(colon + 2, comma), 16);
+      let end = comma + 1;
+      let seen = 0;
+      while (end < text.length && seen < byteLength) {
+        seen += bytes.encode(text[end]).length;
+        end++;
+      }
+      chunks.set(id, text.slice(comma + 1, end));
+      i = end + (text[end] === "\n" ? 1 : 0);
+      continue;
+    }
+    let lineEnd = text.indexOf("\n", colon);
+    if (lineEnd < 0) lineEnd = text.length;
+    let payload = text.slice(colon + 1, lineEnd);
+    if (/^[A-Z]\[/.test(payload)) payload = payload.slice(1);
+    try {
+      chunks.set(id, JSON.parse(payload));
+    } catch {
+      // Not JSON (a hint row we do not model); nothing references it for our purposes.
+    }
+    i = lineEnd + 1;
+  }
+  return chunks;
+}
+
+function walkFlight(chunks, visit) {
+  const stack = [...chunks.values()];
+  while (stack.length) {
+    const node = stack.pop();
+    if (Array.isArray(node)) {
+      for (const x of node) stack.push(x);
+    } else if (node && typeof node === "object") {
+      visit(node);
+      for (const v of Object.values(node)) stack.push(v);
+    }
+  }
+}
+
+// Comments in a Flight stream. Each comment is an element whose `componentKey` is
+// `replaceableComment_<urn>` (nested wrappers repeat the key; the largest is the whole comment).
+// Its subtree, with chunk references resolved, holds the actor header first: the author's
+// profile link, the avatar's "View <name>’s profile" label, and a tracking view named
+// `comment-actor-description` or `reply-actor-description`. Later links in the same subtree are
+// @mentions, so the first profile link is the author. The `[null, "Name", null]` text run is the
+// fallback for the name; the viewer's own comments render it with a " • You" suffix elsewhere.
+export function commentsFromFlight(chunks) {
+  const best = new Map();
+  walkFlight(chunks, (node) => {
+    const key = node.componentKey;
+    if (typeof key === "string" && key.startsWith("replaceableComment_")) {
+      const urn = key.slice("replaceableComment_".length);
+      const size = JSON.stringify(node).length;
+      if (!best.has(urn) || best.get(urn).size < size) best.set(urn, { size, node });
+    }
+  });
+  const out = [];
+  for (const [urn, { node }] of best) {
+    const found = { slug: null, name: null, view: null };
+    const seen = new Set();
+    const visit = (n, depth) => {
+      if (depth > 80) return;
+      if (typeof n === "string") {
+        if (!found.slug) {
+          const m = n.match(/linkedin\.com\/in\/([^/?"#]+)/);
+          if (m) found.slug = m[1];
+        }
+        // The avatar link's accessible label names the author: "View Ada Lovelace’s profile".
+        if (found.slug && !found.name) {
+          const m = n.match(/^View (.+?)(?:’|')s profile$/);
+          if (m) found.name = m[1].trim();
+        }
+        if (!found.view && /^(comment|reply)-actor-description$/.test(n)) found.view = n;
+        const ref = n.match(/^\$L?([0-9a-f]+)$/);
+        if (ref && chunks.has(ref[1]) && !seen.has(ref[1])) {
+          seen.add(ref[1]);
+          visit(chunks.get(ref[1]), depth + 1);
+        }
+        return;
+      }
+      if (Array.isArray(n)) {
+        if (!found.name && n.length === 3 && n[0] === null && typeof n[1] === "string" && n[2] === null && n[1].trim()) {
+          found.name = n[1].trim();
+        }
+        for (const x of n) visit(x, depth + 1);
+      } else if (n && typeof n === "object") {
+        for (const v of Object.values(n)) visit(v, depth + 1);
+      }
+    };
+    visit(node, 0);
+    if (!found.slug) continue; // not a comment we can attribute (should not happen; skip rather than guess)
+    out.push({
+      urn: urn.replace(/^urn:li:comment:\(urn:li:activity:/, "urn:li:comment:(activity:"),
+      commenterUrn: `urn:li:publicIdentifier:${decodeURIComponent(found.slug)}`,
+      commenterName: found.name ? decodeEntities(found.name) : null,
+      createdAt: null,
+      isReply: found.view === "reply-actor-description",
+    });
+  }
+  return out;
+}
+
+// Fallback: the rendered post page, which shows only the first several comments.
 const COMMENT_ID = /id="replaceableComment_(urn:li:comment:\([^)"]*\))"/g;
 
 export function parseRenderedComments(html, max = 100) {

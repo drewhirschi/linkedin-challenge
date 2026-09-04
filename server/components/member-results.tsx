@@ -78,10 +78,10 @@ function Post({ post, showMedia }: { post: PostStat; showMedia: boolean }) {
       <div className="metrics">
         <Metric label="Impressions" value={post.impressions} />
         <Metric label="Reactions" value={post.reactions} />
-        {/* Only other people's comments score, so show that number and keep the raw total beside
-            it — otherwise a post whose comments are all the author's own looks mis-scored. */}
+        {/* Only distinct other people score, so show that number and keep LinkedIn's raw total
+            beside it — otherwise a long back-and-forth with one person looks mis-scored. */}
         <Metric
-          label={post.comments !== post.commentsByOthers ? "Comments (others)" : "Comments"}
+          label={post.comments !== post.commentsByOthers ? "Commenters" : "Comments"}
           value={post.commentsByOthers}
           sub={post.comments !== post.commentsByOthers ? `${post.comments} total` : undefined}
         />

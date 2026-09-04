@@ -40,7 +40,7 @@ export function Rules({ config, compact = false }: { config: ScoringConfig; comp
         </li>
         <li>
           <strong>Earn engagement{config.normalizeByFollowers ? ", adjusted for the size of audience" : ""}.</strong>{" "}
-          Every comment is worth {fmtRate(config.perComment)} points, {perReaction(config.perReaction)}
+          Every person who comments is worth {fmtRate(config.perComment)} points, {perReaction(config.perReaction)}
           {extras.length > 0 && `, ${extras.join(", ")}`}.
           {config.engagementCap > 0 && (
             <>
@@ -49,7 +49,8 @@ export function Rules({ config, compact = false }: { config: ScoringConfig; comp
             </>
           )}
           {config.normalizeByFollowers && " That is then scaled to your follower count."}{" "}
-          Comments you leave on your own posts don&rsquo;t count.
+          One person counts once per post however many times they reply, and comments you leave
+          on your own posts don&rsquo;t count.
         </li>
       </ol>
       {(config.perFollowerGained > 0 || config.perProfileView > 0) && (
