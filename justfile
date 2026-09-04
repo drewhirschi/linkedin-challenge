@@ -79,6 +79,7 @@ check:
     node --check extension/sync.js
     bash -n extension/build.sh
     server/scripts/test-auth-e2e.sh
+    node scripts/test-extension-e2e.mjs
     git diff --check
 
 # Drive the extension's LinkedIn collectors in headless Chromium on the signed-in dev profile
