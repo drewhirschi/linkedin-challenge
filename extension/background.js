@@ -12,12 +12,18 @@ const ALARM = "challenge-sync";
 globalThis.diagnose = diagnose;
 
 // (Re)arm the periodic alarm with a little jitter so installs don't sync in lockstep.
+//
+// The first delay is "whatever is left of the current interval", not a fresh full period: this
+// runs on every browser start, and a fresh 12-hour delay each time meant anyone who restarts
+// Chrome daily would never reach an automatic sync at all. An overdue install syncs within a
+// minute of the browser coming up.
 async function scheduleSync() {
   const jitter = (Math.random() * 2 - 1) * SYNC_JITTER_MINUTES; // +/- jitter
   const periodInMinutes = Math.max(30, SYNC_PERIOD_MINUTES);
+  const remainingMinutes = (await msUntilSyncAllowed()) / 60_000;
   await chrome.alarms.clear(ALARM);
   chrome.alarms.create(ALARM, {
-    delayInMinutes: Math.max(1, periodInMinutes + jitter),
+    delayInMinutes: Math.max(1, remainingMinutes > 0 ? remainingMinutes + Math.abs(jitter) : 1),
     periodInMinutes,
   });
 }

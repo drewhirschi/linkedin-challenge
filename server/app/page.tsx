@@ -471,7 +471,7 @@ export function ChallengeLeaderboard({ fixedChallengeId }: { fixedChallengeId?: 
         <Rules config={cfg} compact />
         <p>
           Standings update live from everyone&rsquo;s synced LinkedIn data.{" "}
-          <a href={`/challenges/${competition.id}/scoring`}>Full scoring details</a>
+          <a href={`/challenges/${competition.id}/scoring`}>Scoring, with your points line by line</a>
           {" · "}window {fmtDate(competition.startAt)} → {fmtDate(competition.endAt)}
         </p>
       </footer>

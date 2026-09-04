@@ -110,7 +110,7 @@ function Sidebar() {
                     {open && (
                       <>
                         <SideLink href={base} pathname={pathname} nested>Leaderboard</SideLink>
-                        <SideLink href={`${base}/scoring`} pathname={pathname} nested>How scoring works</SideLink>
+                        <SideLink href={`${base}/scoring`} pathname={pathname} nested>Scoring</SideLink>
                         {challenge.isOwner && (
                           <>
                             <SideLink href={`${base}/invites`} pathname={pathname} nested>Invites</SideLink>

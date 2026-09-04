@@ -595,3 +595,17 @@ main:has(.cup) { max-width: 1200px; }
 }
 .cup-list .who-link { color: inherit; text-decoration: none; font-weight: inherit; }
 .cup-list .who-link:hover { text-decoration: underline; }
+
+/* --- scoring ledger ------------------------------------------------------------------------- */
+.grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) { .grid.cols-4 { grid-template-columns: 1fr 1fr; } }
+.ledger-week { margin-top: 18px; }
+.ledger-week .week-head { flex-wrap: wrap; }
+.ledger-week-total { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+table.ledger { min-width: 720px; }
+table.ledger th, table.ledger td { padding: 10px 10px; vertical-align: top; }
+table.ledger td:first-child { max-width: 360px; }
+.ledger-post { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; }
+.ledger-excerpt { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-top: 2px; }
+.ledger-dropped td { color: var(--muted); }
+.ledger-dropped .ledger-post a { color: var(--muted); }

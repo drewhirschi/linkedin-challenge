@@ -11,8 +11,8 @@ use utoipa::ToSchema;
 
 use crate::models::{ChallengeMembership, Competition, Invite, Member, Org, Post};
 use crate::scoring::{
-    Dataset, Engagement, ScoringConfig, Standing, WEEK_SECONDS, active_competition,
-    current_week, standings_from,
+    Dataset, Engagement, Ledger, ScoringConfig, Standing, WEEK_SECONDS, active_competition,
+    current_week, ledger_for, standings_from,
 };
 use crate::util::now_unix;
 use crate::web::{ApiError, ApiResult};
@@ -165,6 +165,8 @@ pub struct Leaderboard {
     pub standings: Vec<StandingRow>,
     /// The viewer's own row, when they are scoring.
     pub viewer: Option<StandingRow>,
+    /// The full accounting behind the viewer's row — every post and every rule applied.
+    pub viewer_ledger: Option<Ledger>,
     pub viewer_member_id: i64,
     pub viewer_name: String,
     pub season: Option<Season>,
@@ -512,6 +514,10 @@ pub async fn leaderboard(
         _ => Vec::new(),
     };
     let viewer = standings.iter().find(|s| s.member_id == member.id).map(clone_row);
+    let viewer_ledger = match (&comp, &data) {
+        (Some(c), Some(data)) => ledger_for(c, data, member.id, now),
+        _ => None,
+    };
 
     let season = comp.as_ref().map(|c| Season {
         week: current_week(c, now) + 1,
@@ -529,6 +535,7 @@ pub async fn leaderboard(
 
     Ok(Leaderboard {
         viewer,
+        viewer_ledger,
         viewer_member_id: member.id,
         viewer_name: member.display_name.clone(),
         season,
