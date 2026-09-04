@@ -80,7 +80,16 @@ pub async fn post(
         created_at: now_unix(),
     })
     .exec(&mut db)
-    .await?;
+    .await
+    .map_err(|error| {
+        // Two concurrent signups for one address slip past the lookup above; the unique index
+        // on `members.email` (and the derived URN placeholder) catches the second one here.
+        if error.to_string().to_ascii_lowercase().contains("unique") {
+            ApiError::conflict("an account with that email already exists")
+        } else {
+            error.into()
+        }
+    })?;
 
     // Everyone competes in whatever is running: a new account lands on the board immediately.
     enroll_in_running_challenges(&mut db, member.id).await?;

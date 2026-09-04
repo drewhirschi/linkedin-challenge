@@ -35,7 +35,7 @@ done
 
 base="http://127.0.0.1:$port"
 cookies="$test_dir/cookies"
-email="auth-e2e@example.test"
+email="auth-e2e@enzo.health"
 password="AuthE2E!password"
 
 request() {
@@ -52,8 +52,12 @@ request() {
 
 request 200 "$test_dir/health.json" "$base/api/health"
 request 400 "$test_dir/weak.json" -H 'content-type: application/json' \
-  --data-binary '{"name":"Auth Test","email":"weak@example.test","password":"short"}' \
+  --data-binary '{"name":"Auth Test","email":"weak@enzo.health","password":"short"}' \
   "$base/api/auth/signup"
+request 400 "$test_dir/outside-domain.json" -H 'content-type: application/json' \
+  --data-binary '{"name":"Outsider","email":"outsider@example.com","password":"AuthE2E!password"}' \
+  "$base/api/auth/signup"
+grep -q 'Your email is not valid' "$test_dir/outside-domain.json"
 request 200 "$test_dir/signup.json" -c "$cookies" -H 'content-type: application/json' \
   --data-binary "{\"name\":\"Auth E2E\",\"email\":\"$email\",\"password\":\"$password\"}" \
   "$base/api/auth/signup"
