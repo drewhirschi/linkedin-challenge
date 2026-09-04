@@ -4,7 +4,7 @@
 use axum::{Extension, Json};
 use http::HeaderMap;
 use linkedin_challenge_server::auth::member_from_bearer;
-use linkedin_challenge_server::models::{Post, PostComment, PostSnapshot, ProfileSnapshot};
+use linkedin_challenge_server::models::{Member, Post, PostComment, PostSnapshot, ProfileSnapshot};
 use linkedin_challenge_server::util::{now_unix, parse_iso8601};
 use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
@@ -27,12 +27,17 @@ fn bounded_image_urls(urls: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// LinkedIn spells one member several ways (`fs_miniProfile`, `fsd_profile`, `member`); the id
-/// after the last colon is the stable part, so that is what "is this my own comment?" compares.
-fn same_person(a: &str, b: &str) -> bool {
+/// LinkedIn spells one member several ways (`fs_miniProfile`, `fsd_profile`, `member`, and the
+/// rendered page only exposes a public identifier); the id after the last colon is the stable
+/// part, so "is this my own comment?" compares that against both the member's URN and their
+/// public identifier.
+fn same_person(commenter_urn: &str, member: &Member) -> bool {
     let tail = |urn: &str| urn.rsplit(':').next().unwrap_or("").trim_matches(|c| c == '(' || c == ')').to_string();
-    let (ta, tb) = (tail(a), tail(b));
-    !ta.is_empty() && ta == tb
+    let t = tail(commenter_urn);
+    if t.is_empty() {
+        return false;
+    }
+    t == tail(&member.linkedin_urn) || (!member.public_identifier.is_empty() && t == member.public_identifier)
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -294,7 +299,7 @@ pub async fn post(
                 urn: &c.urn,
                 commenter_urn: &c.commenter_urn,
                 commenter_name: c.commenter_name.clone(),
-                is_self: same_person(&c.commenter_urn, &member.linkedin_urn),
+                is_self: same_person(&c.commenter_urn, &member),
                 is_reply: c.is_reply,
                 created_at: c.created_at.as_deref().and_then(parse_iso8601).unwrap_or(0),
                 captured_at,

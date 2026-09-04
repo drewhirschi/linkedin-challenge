@@ -368,14 +368,15 @@ impl Dataset {
     pub fn latest_snapshot_before(&self, post_id: i64, before: i64) -> Option<&PostSnapshot> {
         self.snapshots(post_id).iter().rev().find(|s| s.captured_at <= before)
     }
-    /// Comments by anyone other than the post's author, or None when we have read none.
-    pub fn comments_by_others(&self, post_id: i64) -> Option<i64> {
+    /// Comments that score for a post: LinkedIn's own total minus the author's comments we have
+    /// seen. The extension reads the rendered post page, which shows only the first several
+    /// comments, so the rows are a sample — never a count. When we have read none at all the
+    /// total stands as is.
+    pub fn scored_comments(&self, post_id: i64, linkedin_total: i64) -> i64 {
         let rows = self.comments(post_id);
-        if rows.is_empty() {
-            None
-        } else {
-            Some(rows.iter().filter(|c| !c.is_self).count() as i64)
-        }
+        let self_seen = rows.iter().filter(|c| c.is_self).count() as i64;
+        let others_seen = rows.len() as i64 - self_seen;
+        (linkedin_total - self_seen).max(others_seen).max(0)
     }
 }
 
@@ -563,7 +564,7 @@ fn score_member_full(
         // to your own thread shouldn't earn points. When we have no rows at all (nothing read
         // yet), fall back to LinkedIn's total rather than scoring the post as if it had none.
         let comments_total = snap.and_then(|s| s.comments).unwrap_or(0);
-        let comments = data.comments_by_others(post.id).unwrap_or(comments_total);
+        let comments = data.scored_comments(post.id, comments_total);
         let e = Engagement {
             reactions: snap.and_then(|s| s.reactions).unwrap_or(0),
             comments,
@@ -768,6 +769,24 @@ mod tests {
         assert_eq!(current_streak(&active, 6), 3);
         // Through week 7: week 6 was quiet too, so the streak is broken.
         assert_eq!(current_streak(&active, 7), 0);
+    }
+
+    #[test]
+    fn scored_comments_is_linkedin_total_minus_the_authors_own() {
+        use crate::models::PostComment;
+        let mut data = Dataset::default();
+        let row = |urn: &str, is_self: bool| PostComment {
+            id: 0, post_id: 7, urn: urn.into(), commenter_urn: "urn:li:publicIdentifier:x".into(),
+            commenter_name: None, is_self, is_reply: false, created_at: 0, captured_at: 0,
+            post: Default::default(),
+        };
+        // Nothing read: the total stands.
+        assert_eq!(data.scored_comments(7, 12), 12);
+        // Page showed 3 of 12 comments, one by the author: 12 − 1.
+        data.comments_by_post.insert(7, vec![row("a", false), row("b", true), row("c", false)]);
+        assert_eq!(data.scored_comments(7, 12), 11);
+        // A stale total below what we saw never under-counts what we saw.
+        assert_eq!(data.scored_comments(7, 1), 2);
     }
 
     #[test]

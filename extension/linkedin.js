@@ -89,20 +89,23 @@ export async function getMe() {
 
 // ---- profile metrics ------------------------------------------------------
 
-// Follower count via the network-info surface. Falls back to null.
-export async function getFollowerCount(publicIdentifier) {
-  if (!publicIdentifier) return null;
+// The member's own follower count, from the dash following-state keyed by their profile id.
+//
+// This is the one surface that still answers for it: `networkinfo` is gone (410), the profile
+// top card carries no count, and the post feed only includes FollowingInfo for *other* actors on
+// the page — which is how three people once synced a company page's 3,553 as their own. The id
+// after the last colon of the member URN is the same id `fsd_profile` uses.
+export async function getFollowerCount(memberUrn) {
+  const id = urnTail(memberUrn);
+  if (!id) return null;
   try {
-    const json = await voyagerFetch(
-      `/identity/profiles/${encodeURIComponent(publicIdentifier)}/networkinfo`
-    );
-    const info =
-      (json.data && (json.data.followersCount ?? json.data.followerCount) != null
-        ? json.data
-        : firstWith(json, (e) => e && (e.followersCount != null || e.followerCount != null))) ||
-      {};
-    const count = info.followersCount ?? info.followerCount;
-    return typeof count === "number" ? count : null;
+    const key = `urn:li:fsd_followingState:urn:li:fsd_profile:${id}`;
+    const json = await voyagerFetch(`/feed/dash/followingStates?ids=List(${encodeURIComponent(key)})`);
+    const state =
+      json?.data?.results?.[key] ||
+      firstWith(json, (e) => e && String(e.entityUrn || "") === key && typeof e.followerCount === "number") ||
+      firstWith(json, (e) => e && typeof e.followerCount === "number");
+    return typeof state?.followerCount === "number" ? state.followerCount : null;
   } catch {
     return null;
   }
@@ -251,7 +254,7 @@ async function getPostAnalytics(activityUrn) {
 
 // Fetch posts and the follower count that LinkedIn now includes alongside them. Keeping these in
 // one request avoids the retired `networkinfo` endpoint and matches the live response diagnostics.
-async function getPostFeed(memberUrn) {
+export async function getPostFeed(memberUrn) {
   if (!memberUrn) return { posts: [], followerCount: null, excludedPostUrns: [], postFeedComplete: false };
   let json;
   try {
@@ -315,6 +318,11 @@ async function getPostFeed(memberUrn) {
   return {
     posts: dedupeByUrn(posts),
     followerCount: following?.followerCount ?? null,
+    // Every follower count on the page, for diagnostics and the e2e check: proves the one above
+    // was chosen by identity rather than by position.
+    allFollowerCounts: included(json)
+      .filter((e) => e && /Following(Info|State)$/.test(String(e.$type || "")) && typeof e.followerCount === "number")
+      .map((e) => e.followerCount),
     excludedPostUrns: [...new Set(excludedPostUrns)],
     // Only an under-full first page is authoritative for deletion. At exactly MAX_POSTS, an absent
     // stored post may simply have fallen onto page two rather than having been deleted.
@@ -354,95 +362,65 @@ export function ownFollowingInfo(json, memberUrn) {
 
 // ---- comments -------------------------------------------------------------
 
-// Who commented on a post. Voyager's comments surface is normalized like everything else: each
-// comment is an entity in `included` carrying its own URN, the commenter's profile URN, and
-// (for replies) the parent comment's URN. We report authorship so the server can leave the
-// author's own replies unscored — a thread where you answer every comment shouldn't double your
-// points. Best-effort like the other collectors: any failure returns an empty list, which the
-// server treats as "didn't read comments this time", never as "no comments".
+// Who commented on a post.
+//
+// Voyager's comment endpoints (`/feed/comments`, `/feed/dash/comments`, the GraphQL surface) all
+// answer 400/404 for the current site, so this reads the server-rendered post page instead — the
+// same approach the analytics collector uses. Each comment is rendered as a component whose id
+// carries the comment URN, and the block under it carries the commenter's profile link and an
+// aria-label naming them. We report the commenter as a public-identifier URN (the page exposes no
+// member URN), which the server matches against the account's own identifier.
+//
+// The page renders only the first several comments, so the server treats this list as "comments
+// we saw", never as the total: LinkedIn's count on the post still governs, minus the author's own
+// comments seen here. Best-effort like the other collectors: any failure returns an empty list.
 export async function getPostComments(activityUrn, { max = 100 } = {}) {
   const id = activityId(activityUrn);
   if (!id) return [];
-  const out = [];
   try {
-    let start = 0;
-    while (out.length < max) {
-      const count = Math.min(50, max - out.length);
-      const json = await voyagerFetch(
-        `/feed/comments?count=${count}&start=${start}&q=comments&sortOrder=RELEVANCE` +
-          `&updateId=activity:${id}`,
-      );
-      const page = extractComments(json);
-      for (const comment of page) out.push(comment);
-      if (page.length < count) break;
-      start += count;
-      await sleep(REQUEST_DELAY_MS);
-    }
+    const res = await linkedinFetch(`/feed/update/urn:li:activity:${id}/`);
+    return parseRenderedComments(await res.text(), max);
   } catch {
-    // Return what we managed to read; an empty list is the "unknown" signal.
+    return [];
   }
-  return dedupeByUrn(out);
 }
 
-const COMMENT_URN = /urn:li:comment:\([^)]*\)|urn:li:comment:[^",\s]+/;
+const COMMENT_ID = /id="replaceableComment_(urn:li:comment:\([^)"]*\))"/g;
 
-function extractComments(json) {
-  const isComment = (e) =>
-    e &&
-    (String(e.$type || "").endsWith("Comment") ||
-      String(e.entityUrn || "").includes("urn:li:comment:")) &&
-    (e.commenter || e.commenterProfileId || e["*commenter"] || e.actor);
-  const comments = [];
-  for (const entity of allWith(json, isComment)) {
-    const serialized = JSON.stringify(entity);
-    const urn =
-      (typeof entity.urn === "string" && entity.urn.startsWith("urn:li:comment:") && entity.urn) ||
-      (typeof entity.entityUrn === "string" && entity.entityUrn.match(COMMENT_URN)?.[0]) ||
-      serialized.match(COMMENT_URN)?.[0];
-    if (!urn) continue;
-
-    // The commenter: a nested mini profile, a dash profile reference, or an actor block.
-    const commenter =
-      entity.commenter?.["com.linkedin.voyager.feed.MemberActor"]?.miniProfile ||
-      entity.commenter?.miniProfile ||
-      entity.commenter?.member ||
-      entity.commenter ||
-      entity.actor ||
-      {};
-    const commenterUrn =
-      commenter.entityUrn ||
-      commenter.objectUrn ||
-      commenter["*miniProfile"] ||
-      commenter.urn ||
-      entity["*commenter"] ||
-      entity.commenterProfileId ||
-      serialized.match(/urn:li:(?:fs_miniProfile|fsd_profile|member):[^",\s]+/)?.[0] ||
-      null;
-    if (!commenterUrn) continue;
-
-    const first = commenter.firstName?.text ?? commenter.firstName ?? "";
-    const last = commenter.lastName?.text ?? commenter.lastName ?? "";
+export function parseRenderedComments(html, max = 100) {
+  const anchors = [...html.matchAll(COMMENT_ID)];
+  const seen = new Set();
+  const out = [];
+  for (let i = 0; i < anchors.length && out.length < max; i++) {
+    const urn = anchors[i][1];
+    if (seen.has(urn)) continue;
+    seen.add(urn);
+    // The block for this comment runs until the next comment component starts.
+    const from = anchors[i].index;
+    const to = i + 1 < anchors.length ? anchors[i + 1].index : Math.min(html.length, from + 20_000);
+    const block = html.slice(from, to);
+    const publicIdentifier = block.match(/href="https:\/\/www\.linkedin\.com\/in\/([^/"?#]+)/)?.[1] || null;
+    if (!publicIdentifier) continue;
     const name =
-      commenter.name?.text ??
-      commenter.name ??
-      [first, last].filter((part) => typeof part === "string" && part).join(" ");
-    const parent = entity.parentCommentUrn || entity["*parentComment"] || null;
-    const created =
-      typeof entity.createdTime === "number"
-        ? new Date(entity.createdTime).toISOString()
-        : typeof entity.createdAt === "number"
-          ? new Date(entity.createdAt).toISOString()
-          : null;
-
-    comments.push({
+      block.match(/aria-label="View more options for (.+?)(?:['’]s|['’]) comment\./)?.[1] || null;
+    out.push({
       urn,
-      commenterUrn: String(commenterUrn),
-      commenterName: typeof name === "string" && name ? name : null,
-      createdAt: created,
-      isReply: Boolean(parent),
+      commenterUrn: `urn:li:publicIdentifier:${decodeURIComponent(publicIdentifier)}`,
+      commenterName: name ? decodeEntities(name) : null,
+      createdAt: null, // the page shows "1w", not a timestamp
+      isReply: false,
     });
   }
-  return comments;
+  return out;
+}
+
+function decodeEntities(text) {
+  return String(text)
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 // A member's own identity can surface under several URN schemes (`fs_miniProfile`, `fsd_profile`,
@@ -719,8 +697,14 @@ export async function collectSnapshot() {
   const profileViews = await getProfileViews();
   await sleep(REQUEST_DELAY_MS);
 
-  // Posts arrive with engagement and follower count attached — one request, not one per post.
-  const { posts, followerCount, excludedPostUrns, postFeedComplete } = await getPostFeed(me.memberUrn);
+  // The member's own follower count; the feed's own-entity match is only a fallback.
+  const ownFollowers = await getFollowerCount(me.memberUrn);
+  await sleep(REQUEST_DELAY_MS);
+
+  // Posts arrive with engagement attached — one request, not one per post.
+  const { posts, followerCount: feedFollowers, excludedPostUrns, postFeedComplete } =
+    await getPostFeed(me.memberUrn);
+  const followerCount = ownFollowers ?? feedFollowers;
 
   for (const post of posts) {
     const analytics = await getPostAnalytics(post.urn);

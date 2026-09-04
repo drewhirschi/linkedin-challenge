@@ -81,6 +81,12 @@ check:
     server/scripts/test-auth-e2e.sh
     git diff --check
 
+# Drive the extension's LinkedIn collectors in headless Chromium on the signed-in dev profile
+# (.chromium-dev-profile) and assert the follower count, posts, and comments come back right.
+# Set EXPECTED_FOLLOWERS=<n> to also assert the count within 15%.
+test-extension-e2e: extension-dev
+    node scripts/test-extension-e2e.mjs
+
 # Exercise password auth against a real server and isolated temporary database.
 test-auth-e2e:
     server/scripts/test-auth-e2e.sh
