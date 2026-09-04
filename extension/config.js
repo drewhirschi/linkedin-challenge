@@ -9,17 +9,19 @@ export const SERVER_URL = "http://localhost:3312";
 /// Name of the session cookie the website sets — see `SESSION_COOKIE` in server/src/auth.rs.
 export const SESSION_COOKIE = "session";
 
-// How often to scrape, in minutes — twice a day. LinkedIn etiquette: keep this low.
-export const SYNC_PERIOD_MINUTES = 12 * 60;
+// How often the worker CHECKS whether a sync is due, in minutes. This is deliberately frequent:
+// a laptop that is only open now and then never lands on a 12-hour clock mark, so the question
+// "has it been long enough?" is asked often and answered by MIN_SYNC_INTERVAL_MINUTES below.
+export const SYNC_CHECK_MINUTES = 15;
 
-// Floor between two AUTOMATIC syncs, enforced in code rather than left to the alarm: Chrome can
-// fire an alarm early after a wake-from-sleep or a worker restart, which would quietly turn
-// "twice a day" into something more. Manual syncs bypass it — they're attended and deliberate.
-// Slightly under 12h so a run that drifts a few minutes late doesn't push the next one past its
-// slot.
+// Floor between two AUTOMATIC syncs — the real cadence, twice a day. LinkedIn etiquette: keep
+// this low. Enforced against the last sync time rather than left to the alarm, so frequent
+// checks, wake-from-sleep, and worker restarts can't turn "twice a day" into more. Manual syncs
+// bypass it — they're attended and deliberate. Slightly under 12h so a run that drifts a few
+// minutes late doesn't push the next one past its slot.
 export const MIN_SYNC_INTERVAL_MINUTES = 11 * 60 + 30;
 
-// Random jitter (minutes) added to each scheduled run so many installs don't sync in lockstep.
+// Random jitter (minutes) added to the floor per install so many laptops don't sync in lockstep.
 export const SYNC_JITTER_MINUTES = 45;
 
 // Max posts to pull per sync (most recent first). Competitions only grade a few/week anyway.

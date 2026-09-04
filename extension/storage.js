@@ -10,6 +10,7 @@ const DEFAULTS = {
   lastSyncAt: null,      // ISO timestamp of last successful sync
   lastError: null,       // human-readable last error, or null
   lastPostsIngested: 0,
+  syncJitterMinutes: null, // per-install offset added to the 12h floor, fixed at first sync
 };
 
 export async function getState() {
