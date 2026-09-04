@@ -263,10 +263,11 @@ async function getPostFeed(memberUrn) {
     return { posts: [], followerCount: null, excludedPostUrns: [], postFeedComplete: false };
   }
 
-  const following = firstWith(
-    json,
-    (e) => e && (e.$type || "").endsWith("FollowingInfo") && typeof e.followerCount === "number",
-  );
+  // The member's OWN follower count. The feed response carries a FollowingInfo entity for every
+  // actor on the page — reshared authors, company pages, the lot — so taking the first one
+  // recorded a colleague's 3,500 or a company's 288,000 as the member's own. Match the entity
+  // whose URN names this member; report null rather than guess when it isn't there.
+  const following = ownFollowingInfo(json, memberUrn);
 
   // Updates carry commentary + a socialDetail with reaction/comment/share counts.
   const rootUpdates = new Set(json.data?.["*elements"] || []);
@@ -319,6 +320,30 @@ async function getPostFeed(memberUrn) {
     // stored post may simply have fallen onto page two rather than having been deleted.
     postFeedComplete: rootUpdates.size > 0 && rootUpdates.size < MAX_POSTS,
   };
+}
+
+// The FollowingInfo entity that belongs to `memberUrn`, or null.
+//
+// Identity URNs come in several spellings (`fs_miniProfile`, `fsd_profile`, `member`), but the
+// id after the last colon is the same in all of them, and a FollowingInfo's entityUrn embeds it:
+// `urn:li:fs_followingInfo:urn:li:fsd_profile:ACoAA...`. Company pages embed `urn:li:company:…`
+// instead, so they can never match a member.
+export function ownFollowingInfo(json, memberUrn) {
+  const id = urnTail(memberUrn);
+  if (!id) return null;
+  const isFollowing = (e) =>
+    e &&
+    /Following(Info|State)$/.test(String(e.$type || "")) &&
+    typeof e.followerCount === "number";
+  return (
+    included(json).find(
+      (e) =>
+        isFollowing(e) &&
+        [e.entityUrn, e.followee, e["*followee"], e.dashFollowingStateUrn]
+          .filter((v) => typeof v === "string")
+          .some((v) => v.includes(id)),
+    ) || null
+  );
 }
 
 // NOTE: there used to be a GraphQL "author analytics" call here to fetch impressions, guarded by
