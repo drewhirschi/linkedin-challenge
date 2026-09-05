@@ -102,9 +102,13 @@ Established by bisection against the real request: every field is optional **exc
 page's own `nextPageRequest` (escaped JSON in the HTML) carries the thread key — an activity for
 a normal post, the original `ugcPost` for a repost — and a page token that is a tiny protobuf:
 a session string then field 2 = offset. Reusing that request with the offset reset to 0 and
-`pageSize`/`subsequentPageSize` 250 returns the whole thread in one call (a 134-comment post came
-back as 128 top-level + visible replies, ~55 MB). Without a genuine token the server caps at
-about 20 and ignores the thread key, so the synthetic request is only a fallback. Sort order
+`pageSize`/`subsequentPageSize` 50 pages through the whole thread by rewriting the offset (each
+comment costs ~400 KB of stream; asking for 250 at once worked once, then 500'd on a 134-comment
+post). A page that adds no new comment is the end — page counts are unreliable because visible
+replies ride along with top-level comments. Without a genuine token the server caps at about 20
+and ignores the thread key, so the synthetic request is only a fallback. LinkedIn's displayed
+count runs a little above what any client can read (deleted or hidden comments): a "56 comments"
+post yields 54 here and renders only 44 when fully expanded in the page. Sort order
 must stay `CommentSortOrder_RELEVANCE`; the reverse-chronological value returns an empty stream.
 
 In the stream each comment is an element whose `componentKey` is `replaceableComment_<urn>`; its

@@ -1,7 +1,7 @@
 // MV3 service worker: schedules periodic scrapes, runs them, and answers popup messages.
 import { SYNC_CHECK_MINUTES, SYNC_JITTER_MINUTES, MIN_SYNC_INTERVAL_MINUTES } from "./config.js";
 import { getState, setState, isLinked } from "./storage.js";
-import { collectSnapshot, getMe, getPostFeed, getPostComments, getFollowerCount, diagnose, isLinkedInSignedIn } from "./linkedin.js";
+import { collectSnapshot, getMe, getPostFeed, getPostComments, getFollowerCount, diagnose, isLinkedInSignedIn, commentDiagnostics } from "./linkedin.js";
 import { isAppSignedIn, linkIdentityToAccount, pushSnapshot, signInFromSession } from "./sync.js";
 import { SERVER_URL, LINKEDIN_ORIGIN } from "./config.js";
 
@@ -12,7 +12,7 @@ const ALARM = "challenge-sync";
 globalThis.diagnose = diagnose;
 // The collectors, for the e2e check (scripts/test-extension-e2e.mjs), which drives this worker
 // over DevTools — a service worker can't dynamic-import, so they must be reachable by name.
-globalThis.collectors = { getMe, getPostFeed, getPostComments, getFollowerCount, collectSnapshot };
+globalThis.collectors = { getMe, getPostFeed, getPostComments, getFollowerCount, collectSnapshot, commentDiagnostics };
 
 // Arm the check alarm. It fires every SYNC_CHECK_MINUTES; runSync() decides whether enough time
 // has passed. The first check comes a minute after install or browser start, so a laptop that

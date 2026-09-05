@@ -376,15 +376,18 @@ export function ownFollowingInfo(json, memberUrn) {
 // The page embeds the exact next-page request it will send (`nextPageRequest`): the thread key
 // (an activity for a normal post, the original ugcPost for a repost), a tracking id, and a page
 // token that is a session id plus an offset. We take that verbatim, reset the offset to zero and
-// ask for a large page; the server honours the size when the token is genuine. Without a page
-// token it caps at ~20 and ignores the thread key, so a synthetic request is only the fallback.
+// page through by rewriting the offset; the server honours the page size when the token is
+// genuine. Without a page token it caps at ~20 and ignores the thread key, so a synthetic
+// request is only the fallback.
 // Body shape was established by bisection against the real request (docs/linkedin-scraping.md):
 // everything is optional except `clientArguments.states: []`. Best-effort like the other
 // collectors: on failure we fall back to the rendered page, and that failing returns [].
 const COMMENTS_PAGER = "com.linkedin.sdui.pagers.feed.pagedComments";
 const REPLIES_REQUEST = "com.linkedin.sdui.feed.update.comments.fetchReplies";
-const COMMENT_PAGE_SIZE = 250;
-const COMMENT_MAX_PAGES = 4;
+// 50 per page: each comment costs ~400 KB of Flight stream, and asking for 250 at once made the
+// server give up with a 500 on a 134-comment post. Pages advance by rewriting the token offset.
+const COMMENT_PAGE_SIZE = 50;
+const COMMENT_MAX_PAGES = 10;
 
 export async function getPostComments(activityUrn, { max = 1000 } = {}) {
   const id = activityId(activityUrn);
@@ -396,14 +399,34 @@ export async function getPostComments(activityUrn, { max = 1000 } = {}) {
   } catch (error) {
     if (String(error?.message) === "NOT_LOGGED_IN") throw error;
   }
-  try {
-    const comments = await getPostCommentsSdui(id, html, max);
-    if (comments.length > 0) return comments;
-  } catch (error) {
-    if (String(error?.message) === "NOT_LOGGED_IN") throw error;
+  // Two attempts: LinkedIn's SDUI endpoint answers 500 now and then under a burst of requests,
+  // and a single transient failure would otherwise silently degrade this post to the page's
+  // first handful — which scoring would then treat as the whole thread.
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await sleep(REQUEST_DELAY_MS * 4);
+    try {
+      const comments = await getPostCommentsSdui(id, html, max);
+      pushDiagnostic({ activityId: id, path: "sdui", attempt, count: comments.length });
+      if (comments.length > 0) return comments;
+    } catch (error) {
+      if (String(error?.message) === "NOT_LOGGED_IN") throw error;
+      lastError = String(error?.message || error);
+    }
   }
-  return html ? parseRenderedComments(html, max) : [];
+  const rendered = html ? parseRenderedComments(html, max) : [];
+  pushDiagnostic({ activityId: id, path: "rendered", count: rendered.length, error: lastError });
+  return rendered;
 }
+
+// Which path each post's comments came from, for the e2e and the diagnostics report. Bounded so
+// a long-lived worker does not grow it forever.
+export const commentDiagnostics = [];
+const COMMENT_DIAGNOSTICS_MAX = 100;
+const pushDiagnostic = (entry) => {
+  commentDiagnostics.push(entry);
+  if (commentDiagnostics.length > COMMENT_DIAGNOSTICS_MAX) commentDiagnostics.shift();
+};
 
 async function sduiPost(path, body) {
   const res = await linkedinFetch(path, {
@@ -528,7 +551,9 @@ async function getPostCommentsSdui(activityId, html, max) {
         if (key && !replyRequests.has(key)) replyRequests.set(key, node.value);
       }
     });
-    if (added < COMMENT_PAGE_SIZE) break; // an under-full page is the last one
+    // Pages carry visible replies alongside their top-level comments, so "fewer than a page"
+    // is not a reliable end signal; only a page that adds nothing is.
+    if (added === 0) break;
   }
 
   for (const request of replyRequests.values()) {
