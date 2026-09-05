@@ -77,12 +77,21 @@ The script refuses to deploy if no `.func` directory appears in `.vercel/output`
 classic silent failure when `cargo-zigbuild` is missing: everything reports green and no binary is
 produced.
 
-## Schema on a fresh database
+## Schema migrations
 
-`connect()` creates the schema only when the database is empty, and never alters an existing table
-(see `server/README.md`). On a brand-new production database the first boot creates everything. After
-a model change, `sync-schema.sh` adds missing tables in place; anything else needs a hand-written
-migration.
+Migrations are a deploy step, not a startup step. `scripts/deploy-prebuilt.sh` runs the `migrate`
+binary against the production database (direct, unpooled connection from the pulled Vercel env)
+**before** it uploads the build; `just migrate-prod` runs the same thing by hand, and `just migrate`
+applies it to the local file. The serverless function only opens a connection — it never issues DDL,
+so cold starts stay cheap, concurrent instances cannot race on `ALTER TABLE`, and a broken migration
+fails the deploy instead of crashing every instance.
+
+`models::migrate` is a fixed, idempotent list: `push_schema()` on an empty database, then
+create-if-missing tables and indexes, add-column-if-missing statements, and guarded backfills.
+There is no migrations table; every statement must stay safe to re-run. Because the old build keeps
+serving while the new one uploads, every change must also be additive — never drop or rename a
+column the running code reads. Debug builds of the server still migrate on startup so local
+development needs no extra step.
 
 ## The trap that cost the first deploy
 

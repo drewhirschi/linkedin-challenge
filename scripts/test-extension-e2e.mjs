@@ -147,8 +147,11 @@ try {
       const feed = await li.getPostFeed(me.memberUrn);
       feed.followerCount = (await li.getFollowerCount(me.memberUrn)) ?? feed.followerCount;
       // Every follower count on the page, so we can prove we picked our own and not the biggest.
-      const withComments = feed.posts.find((p) => (p.metrics.comments ?? 0) > 0);
-      const comments = withComments ? await li.getPostComments(withComments.urn, { max: 50 }) : null;
+      // The busiest post: the collector must read the whole thread, not the page's first few.
+      const withComments = feed.posts
+        .filter((p) => (p.metrics.comments ?? 0) > 0)
+        .sort((a, b) => (b.metrics.comments ?? 0) - (a.metrics.comments ?? 0))[0];
+      const comments = withComments ? await li.getPostComments(withComments.urn) : null;
       return {
         me,
         followerCount: feed.followerCount,
@@ -206,6 +209,16 @@ try {
       const tail = (u) => String(u).split(":").pop();
       const mine = c.filter((x) => tail(x.commenterUrn) === tail(report.me.memberUrn) || tail(x.commenterUrn) === report.me.publicIdentifier);
       ok(`${mine.length} of them are the author's own (these won't score)`);
+      // Whole-thread coverage: LinkedIn's count includes replies, so anything well short of it
+      // means the pager or the reply fetch has regressed to the page's first handful.
+      const expected = report.commentsExpected ?? 0;
+      if (expected >= 10 && c.length < expected * 0.8) {
+        fail(`read ${c.length} of ${expected} comments — the SDUI comment pager is not returning the whole thread`);
+      } else if (expected >= 10) ok(`whole thread: ${c.length} of ${expected}`);
+      const people = new Set(c.filter((x) => !mine.includes(x)).map((x) => x.commenterUrn));
+      ok(`${people.size} distinct commenters other than the author (what scores)`);
+      const dupUrns = c.length - new Set(c.map((x) => x.urn)).size;
+      if (dupUrns) fail(`${dupUrns} duplicate comment URNs in the collector output`);
     }
   } else {
     console.log("skip no post with comments in the feed, comment collector not exercised");

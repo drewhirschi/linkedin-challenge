@@ -15,7 +15,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cargo build --bin linkedin-challenge-server
+cargo build --bin linkedin-challenge-server --bin migrate
+
+# The server never migrates in release builds; exercise the real deploy order here too.
+DATABASE_URL="turso:$test_dir/auth.db" ./target/debug/migrate >"$test_dir/migrate.log" 2>&1 || {
+  cat "$test_dir/migrate.log" >&2
+  exit 1
+}
 
 DATABASE_URL="turso:$test_dir/auth.db" PORT=0 \
   ./target/debug/linkedin-challenge-server >"$test_dir/server.log" 2>&1 &
@@ -35,7 +41,7 @@ done
 
 base="http://127.0.0.1:$port"
 cookies="$test_dir/cookies"
-email="auth-e2e@example.test"
+email="auth-e2e@enzo.health"
 password="AuthE2E!password"
 
 request() {
@@ -52,8 +58,12 @@ request() {
 
 request 200 "$test_dir/health.json" "$base/api/health"
 request 400 "$test_dir/weak.json" -H 'content-type: application/json' \
-  --data-binary '{"name":"Auth Test","email":"weak@example.test","password":"short"}' \
+  --data-binary '{"name":"Auth Test","email":"weak@enzo.health","password":"short"}' \
   "$base/api/auth/signup"
+request 400 "$test_dir/outside-domain.json" -H 'content-type: application/json' \
+  --data-binary '{"name":"Outsider","email":"outsider@example.com","password":"AuthE2E!password"}' \
+  "$base/api/auth/signup"
+grep -q 'Your email is not valid' "$test_dir/outside-domain.json"
 request 200 "$test_dir/signup.json" -c "$cookies" -H 'content-type: application/json' \
   --data-binary "{\"name\":\"Auth E2E\",\"email\":\"$email\",\"password\":\"$password\"}" \
   "$base/api/auth/signup"

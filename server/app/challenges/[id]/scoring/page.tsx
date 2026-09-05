@@ -69,7 +69,7 @@ function WeekBlock({ week, cfg, factor }: { week: LedgerWeek; cfg: ScoringConfig
             <thead>
               <tr>
                 <th>Post</th>
-                <th className="num">Comments</th>
+                <th className="num" title="Distinct people other than you who commented; LinkedIn's raw total follows the slash">Commenters</th>
                 <th className="num">Likes</th>
                 <th className="num">Engagement</th>
                 <th className="num">× {fmtNum(factor)}</th>

@@ -41,8 +41,9 @@ Reachable signed out: `/login`, `/join` (redeem an invite code), `/signup` (crea
 | `SEED_DEMO` | _(unset)_ | If set, seeds a demo org + competition + participants on first run. |
 | `PORT` | `3000` | Bind port; falls back to the next free port up to +20. |
 
-**Changing a model wipes the dev database.** `push_schema()` cannot alter an existing table, so a
-new field means deleting `linkedin.db` and re-running — every account and every synced post goes
+**Changing a model without a migration wipes the dev database.** `push_schema()` cannot alter an
+existing table, so a new field needs an `ADD COLUMN` statement in `models::migrate`; without one
+the only fix is deleting `linkedin.db` and re-running — every account and every synced post goes
 with it, and any linked extension starts getting 401s because its member row is gone. The extension
 recovers on its own if the browser still has a website session; otherwise it asks the user to press
 Connect.
@@ -52,10 +53,11 @@ Back up with `./backup-db.sh` first, **not** by copying `linkedin.db`. libsql ke
 that has already happened once here, and the real data was deleted along with the WAL. The script
 folds the WAL in and refuses to leave behind a backup with zero tables.
 
-The schema is created on first run only: Toasty's `push_schema()` issues plain `CREATE TABLE` with
-no create-if-missing, so `connect()` probes for an existing table and pushes only when the database
-is empty. It still does not *migrate* — after changing a model, delete `linkedin.db*` (or point
-`DATABASE_URL` at a fresh file) to recreate.
+The schema is applied by `models::migrate`, not by `connect()`: `push_schema()` on an empty
+database, then the additive statements for every field added since. Debug builds run it on startup;
+release builds never do — production is migrated by `just migrate-prod` (the deploy script runs it
+before uploading). After adding a field to a model, add the matching `ALTER TABLE ... ADD COLUMN`
+to `migrate` so existing databases keep their data. See `docs/deploying.md`.
 
 ### Editor setup
 
