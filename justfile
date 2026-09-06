@@ -79,6 +79,7 @@ check:
     node --check extension/sync.js
     bash -n extension/build.sh
     server/scripts/test-auth-e2e.sh
+    python3 server/scripts/test-followers-e2e.py
     node scripts/test-extension-e2e.mjs
     git diff --check
 
@@ -95,3 +96,8 @@ test-auth-e2e:
 # On a clean, pushed commit: run all checks and post the required GitHub commit status.
 signoff:
     scripts/local-check-signoff.sh
+
+# Verify follower sync, access controls, and scoring on an isolated local database.
+test-followers-e2e:
+    cd server && cargo build --bin linkedin-challenge-server
+    python3 server/scripts/test-followers-e2e.py

@@ -77,6 +77,7 @@ export default function AdminOverviewPage() {
                   <tr>
                     <th>#</th>
                     <th>Participant</th>
+                    <th className="num">Followers</th>
                     <th className="num">Total</th>
                   </tr>
                 </thead>
@@ -85,8 +86,9 @@ export default function AdminOverviewPage() {
                     <tr key={row.memberId}>
                       <td className={`rank r${row.rank}`}>{row.rank}</td>
                       <td>
-                        <a href={`/members/${row.memberId}`}>{row.displayName}</a>
+                        <a href={`/members/${row.memberId}?challengeId=${current.id}`}>{row.displayName}</a>
                       </td>
+                      <td className="num">{row.followersUnknown ? "Not synced" : fmtInt(row.followerCount)}</td>
                       <td className="num">
                         <strong>{fmtNum(row.total)}</strong>
                       </td>

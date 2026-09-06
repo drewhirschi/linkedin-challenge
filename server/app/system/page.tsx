@@ -1,7 +1,7 @@
 // The product operator's panel: every user and impersonation — the support tool for
 // "what is this user actually seeing?". Reachable only with the system-admin flag.
 import { useGetSystemOverview, useImpersonate } from "@linkedin-challenge/client/react-query";
-import { fmtDate, initials } from "../../components/format";
+import { fmtDate, fmtInt, initials } from "../../components/format";
 
 export default function SystemPanel() {
   const { data, isLoading } = useGetSystemOverview();
@@ -25,13 +25,14 @@ export default function SystemPanel() {
         Every account on the platform. &ldquo;View as&rdquo; swaps your session for theirs — you
         see exactly what they see, with a banner in the sidebar until you stop.
       </p>
-      <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="panel" style={{ padding: 0, overflowX: "auto" }}>
             <table>
               <thead>
                 <tr>
                   <th>User</th>
                   <th>Email</th>
                   <th>Role</th>
+                  <th className="num">Followers</th>
                   <th>Last sync</th>
                   <th />
                 </tr>
@@ -55,6 +56,7 @@ export default function SystemPanel() {
                         <span className="muted">user</span>
                       )}
                     </td>
+                    <td className="num">{m.followerCount == null ? "Not synced" : fmtInt(m.followerCount)}</td>
                     <td className="small muted">
                       {m.lastSyncedAt ? fmtDate(m.lastSyncedAt) : "never"}
                     </td>

@@ -240,6 +240,7 @@ pub fn active_competition(comps: Vec<Competition>, now: i64) -> Option<Competiti
 /// One member's standing in a competition.
 #[derive(Debug, Clone)]
 pub struct Standing {
+    pub followers_unknown: bool,
     pub member_id: i64,
     pub display_name: String,
     pub profile_url: Option<String>,
@@ -327,7 +328,8 @@ impl Dataset {
             ProfileSnapshot::filter(ProfileSnapshot::fields().member_id().in_list(ids))
                 .exec(&mut *db)
                 .await?;
-        profiles.sort_by_key(|p| p.captured_at);
+        // Multiple syncs can land in the same second; insertion order breaks ties.
+        profiles.sort_by_key(|p| (p.captured_at, p.id));
         for profile in profiles {
             data.profile_by_member.entry(profile.member_id).or_default().push(profile);
         }
@@ -704,6 +706,7 @@ fn score_member_full(
     };
 
     let standing = Standing {
+        followers_unknown: known_followers.is_none(),
         member_id: member.id,
         display_name: member.display_name.clone(),
         profile_url: member.profile_url.clone(),

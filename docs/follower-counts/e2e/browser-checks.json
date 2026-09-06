@@ -1,0 +1,17 @@
+{
+  "checks": [
+    "Historical board shows window follower counts",
+    "Name opens member with challenge context",
+    "Latest 4,000 differs from scoring 4,200 with 0.238 multiplier",
+    "Back returns to originating challenge",
+    "Participant can open teammate results",
+    "My posts shows latest synced count",
+    "Admin table shows latest count after rapid syncs",
+    "Admin table preserves never-synced state",
+    "Controlled results render 122.5 total and 0.5 multiplier",
+    "Admin overview renders follower column and expected fixture values",
+    "Admin name link opens teammate in correct challenge",
+    "No browser console errors in verified flows"
+  ],
+  "consoleErrors": []
+}

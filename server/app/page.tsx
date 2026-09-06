@@ -118,11 +118,12 @@ function Row({
       <Avatar name={row.displayName} size={64} />
       <div className="body">
         <div className="name">
-          {row.displayName}
+          <a href={`/members/${row.memberId}?challengeId=${challengeId}`}>{row.displayName}</a>
           {isMe && <span className="you">YOU</span>}
         </div>
         <div className="sub">
-          <a href={`/members/${row.memberId}?challengeId=${challengeId}`}>See posts →</a>
+          <span>{row.followersUnknown ? "Followers not synced" : `${fmtInt(row.followerCount)} followers`} · </span>
+          <a href={`/members/${row.memberId}?challengeId=${challengeId}`}>See results →</a>
         </div>
         <div className="chips">
           <Chip label="Show up" value={fmtNum(row.showUpPoints)} />
@@ -430,9 +431,10 @@ export function ChallengeLeaderboard({ fixedChallengeId }: { fixedChallengeId?: 
                   <li key={row.memberId} className={row.memberId === viewerMemberId ? "me" : ""}>
                     <span className="rank">{row.rank}</span>
                     <Avatar name={row.displayName} size={40} />
-                    <span className="who">
+                    <span>
                       <a className="who-link" href={`/members/${row.memberId}?challengeId=${competition.id}`}>{row.displayName}</a>
                       {row.memberId === viewerMemberId && <span className="muted"> · you</span>}
+                      <span className="small muted" style={{ display: "block" }}>{row.followersUnknown ? "Followers not synced" : `${fmtInt(row.followerCount)} followers`}</span>
                     </span>
                     <span className="pts">{fmtNum(pointsFor(row, mode))}</span>
                     <a href={`/members/${row.memberId}?challengeId=${competition.id}`}>View posts →</a>

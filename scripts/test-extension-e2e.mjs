@@ -59,7 +59,7 @@ const chrome = spawn(
     "--no-default-browser-check",
     "--disable-gpu",
     "--window-size=1280,900",
-    "about:blank",
+    "https://www.linkedin.com/feed/",
   ],
   { stdio: ["ignore", "ignore", "pipe"] },
 );
@@ -137,6 +137,15 @@ try {
   }
   if (!ready) throw new Error("background.js never exposed globalThis.collectors (stale worker, or the module failed to load)");
   ok(`worker ready, extension version ${ready}`);
+
+  // A saved login can outlive LinkedIn's session-only CSRF cookie. Opening the feed
+  // lets LinkedIn restore that cookie before the collectors make Voyager requests.
+  let sessionReady = false;
+  for (let i = 0; i < 60 && !sessionReady; i++) {
+    sessionReady = await evalInWorker(cdp, `chrome.cookies.get({ url: "https://www.linkedin.com", name: "JSESSIONID" }).then(cookie => Boolean(cookie?.value))`);
+    if (!sessionReady) await sleep(500);
+  }
+  if (!sessionReady) throw new Error("LinkedIn session did not initialize; sign into the configured Chrome profile first");
 
   const report = await evalInWorker(
     cdp,

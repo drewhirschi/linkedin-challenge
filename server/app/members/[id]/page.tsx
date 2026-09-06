@@ -13,7 +13,7 @@ export default function MemberPage({ params }: { params: { id: string } }) {
     <MemberResults
       memberId={Number(params.id)}
       challengeId={challengeId}
-      backHref="/"
+      backHref={challengeId ? `/challenges/${challengeId}` : "/"}
       backLabel="Leaderboard"
     />
   );
