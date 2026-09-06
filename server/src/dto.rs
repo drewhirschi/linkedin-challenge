@@ -51,6 +51,7 @@ impl CompetitionInfo {
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StandingRow {
+    pub followers_unknown: bool,
     pub rank: usize,
     pub member_id: i64,
     pub display_name: String,
@@ -85,6 +86,7 @@ impl StandingRow {
             member_id: s.member_id,
             display_name: s.display_name,
             profile_url: s.profile_url,
+            followers_unknown: s.followers_unknown,
             follower_count: s.follower_count,
             follower_growth: s.follower_growth,
             show_up_points: s.show_up_points,
@@ -225,6 +227,7 @@ pub struct WeekGroup {
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MemberDetail {
+    pub follower_count: Option<i64>,
     pub competition: Option<CompetitionInfo>,
     pub member_id: i64,
     pub display_name: String,
@@ -244,6 +247,7 @@ pub struct MemberDetail {
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PostPage {
+    pub follower_count: Option<i64>,
     pub posts: Vec<PostStat>,
     pub total: usize,
     pub page: usize,
@@ -563,6 +567,7 @@ fn clone_row(s: &StandingRow) -> StandingRow {
         member_id: s.member_id,
         display_name: s.display_name.clone(),
         profile_url: s.profile_url.clone(),
+        followers_unknown: s.followers_unknown,
         follower_count: s.follower_count,
         follower_growth: s.follower_growth,
         show_up_points: s.show_up_points,
@@ -875,6 +880,7 @@ pub async fn member_detail(
     }
 
     Ok(MemberDetail {
+        follower_count: data.profile(member.id).iter().rev().find_map(|p| p.follower_count),
         competition: comp.as_ref().map(CompetitionInfo::new),
         member_id: member.id,
         display_name: member.display_name,
@@ -959,6 +965,7 @@ pub async fn user_posts(
     let page = post_page.clamp(1, page_count);
     let start = (page - 1) * post_page_size;
     Ok(PostPage {
+        follower_count: data.profile(member_id).iter().rev().find_map(|p| p.follower_count),
         posts: posts.into_iter().skip(start).take(post_page_size).collect(),
         total,
         page,
@@ -1061,6 +1068,7 @@ pub async fn admin_overview(db: &mut Db, admin: &Member) -> ApiResult<AdminOverv
 #[derive(Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemMemberRow {
+    pub follower_count: Option<i64>,
     pub id: i64,
     pub display_name: String,
     pub email: Option<String>,
@@ -1091,13 +1099,21 @@ pub async fn system_overview(db: &mut Db) -> ApiResult<SystemOverview> {
         .map(|membership| membership.member_id)
         .collect();
     let mut last_synced: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+    let mut followers = std::collections::HashMap::new();
     for snapshot in crate::models::ProfileSnapshot::all().exec(&mut *db).await? {
+        if let Some(count) = snapshot.follower_count {
+            let entry = followers.entry(snapshot.member_id).or_insert((snapshot.captured_at, count));
+            if snapshot.captured_at > entry.0 {
+                *entry = (snapshot.captured_at, count);
+            }
+        }
         let entry = last_synced.entry(snapshot.member_id).or_insert(snapshot.captured_at);
         *entry = (*entry).max(snapshot.captured_at);
     }
     let members = users
         .into_iter()
         .map(|user| SystemMemberRow {
+            follower_count: followers.get(&user.id).map(|(_, count)| *count),
             id: user.id,
             owns_challenge: owners.contains(&user.id),
             last_synced_at: last_synced.get(&user.id).copied(),

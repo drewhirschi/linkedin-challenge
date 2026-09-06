@@ -312,6 +312,11 @@ export function MemberResults({
         <h1 style={{ margin: 0 }}>{detail.displayName}</h1>
       </div>
 
+      <p className="small muted">
+        <strong>{detail.followerCount == null ? "Followers not synced yet" : `${fmtInt(detail.followerCount)} followers`}</strong>
+        {detail.followerCount != null && " · Latest synced count"}
+      </p>
+
       {detail.profileUrl && (
         <p className="small muted">
           <a href={detail.profileUrl} target="_blank" rel="noreferrer">
@@ -344,8 +349,8 @@ export function MemberResults({
                 <div className="v">{fmtNum(standing.total)}</div>
               </div>
               <div className="stat">
-                <div className="k">Followers</div>
-                <div className="v">{fmtInt(standing.followerCount)}</div>
+                <div className="k">Followers used for scoring</div>
+                <div className="v">{standing.followersUnknown ? "Not synced" : fmtInt(standing.followerCount)}</div>
               </div>
               <div className="stat">
                 <div className="k">Posts scored</div>
@@ -359,6 +364,15 @@ export function MemberResults({
             </div>
           ) : (
             <div className="empty">No synced data inside the challenge window yet.</div>
+          )}
+
+          {standing && (
+            <p className="small muted">
+              {competition.config.normalizeByFollowers && competition.config.followerBaseline > 0 && standing.followerCount > 0
+                ? `Engagement adjustment: ${fmtInt(competition.config.followerBaseline)} baseline ÷ ${fmtInt(standing.followerCount)} followers = ${(competition.config.followerBaseline / standing.followerCount).toLocaleString(undefined, { maximumSignificantDigits: 3 })}×. Applied to capped engagement points; posting and consistency points stay the same.`
+                : "Engagement is not scaled by follower count for these results."}
+              {" "}<a href={`/challenges/${competition.id}/scoring`}>See scoring rules →</a>
+            </p>
           )}
 
           <h2>Posts by week</h2>
@@ -423,6 +437,10 @@ export function PersonalPosts({ displayName }: { displayName: string }) {
         </span>
         <h1 style={{ margin: 0 }}>{displayName}</h1>
       </div>
+      <p className="small muted">
+        <strong>{data.data.followerCount == null ? "Followers not synced yet" : `${fmtInt(data.data.followerCount)} followers`}</strong>
+        {data.data.followerCount != null && " · Latest synced count"}
+      </p>
       <p className="lede">Your LinkedIn data belongs to you. Challenges can read it only after you join.</p>
       <MediaToggle checked={showMedia} onChange={setShowMedia} />
       <PostExplorer
