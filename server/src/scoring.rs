@@ -328,7 +328,8 @@ impl Dataset {
             ProfileSnapshot::filter(ProfileSnapshot::fields().member_id().in_list(ids))
                 .exec(&mut *db)
                 .await?;
-        profiles.sort_by_key(|p| p.captured_at);
+        // Multiple syncs can land in the same second; insertion order breaks ties.
+        profiles.sort_by_key(|p| (p.captured_at, p.id));
         for profile in profiles {
             data.profile_by_member.entry(profile.member_id).or_default().push(profile);
         }

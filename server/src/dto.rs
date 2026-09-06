@@ -1102,9 +1102,9 @@ pub async fn system_overview(db: &mut Db) -> ApiResult<SystemOverview> {
     let mut followers = std::collections::HashMap::new();
     for snapshot in crate::models::ProfileSnapshot::all().exec(&mut *db).await? {
         if let Some(count) = snapshot.follower_count {
-            let entry = followers.entry(snapshot.member_id).or_insert((snapshot.captured_at, count));
-            if snapshot.captured_at > entry.0 {
-                *entry = (snapshot.captured_at, count);
+            let entry = followers.entry(snapshot.member_id).or_insert(((snapshot.captured_at, snapshot.id), count));
+            if (snapshot.captured_at, snapshot.id) > entry.0 {
+                *entry = ((snapshot.captured_at, snapshot.id), count);
             }
         }
         let entry = last_synced.entry(snapshot.member_id).or_insert(snapshot.captured_at);

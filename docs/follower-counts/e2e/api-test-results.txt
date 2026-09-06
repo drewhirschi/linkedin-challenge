@@ -1,0 +1,29 @@
+cd server && cargo build --bin linkedin-challenge-server
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+python3 server/scripts/test-followers-e2e.py
+PASS: initial count agrees across personal results, member results and All users
+PASS: ordinary participant can inspect a teammate in the same challenge
+PASS: system users restricted and anonymous member reads rejected
+PASS: another member requires explicit shared challenge context
+PASS: never-synced counts remain null
+PASS: sync 2000: latest known count is 2000 on every surface
+PASS: sync 3000: latest known count is 3000 on every surface
+PASS: sync 0: latest known count is 0 on every surface
+PASS: sync None: latest known count is 0 on every surface
+PASS: sync 4000: latest known count is 4000 on every surface
+PASS: sync None: latest known count is 4000 on every surface
+PASS: rapid-sync regression actually exercised a same-second timestamp tie
+PASS: known reading is not marked unknown
+PASS: unknown follower count leaves engagement unscaled
+PASS: known zero stays zero and avoids division by zero
+PASS: independent scoring oracle: 185 capped engagement × 0.5 = 92.5
+PASS: posting and consistency remain 10 and 20; total is 122.5
+PASS: normalization disabled: engagement 185, total 215
+PASS: historical results distinguish latest audience from window scoring count
+{
+  "result": "PASS",
+  "checks": 19,
+  "base": "http://127.0.0.1:34619",
+  "historicalMember": "/members/4?challengeId=2",
+  "fixtureMember": "/members/9?challengeId=3"
+}

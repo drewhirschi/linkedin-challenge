@@ -24,3 +24,7 @@ Prototype screenshots use isolated, seeded demo accounts and data.
 - Browser verification covered the board, clicking a participant name, challenge-aware back navigation, and All users.
 
 No schema migration or scoring formula change is required. Production deployment is separate from this PR.
+
+## Expanded end-to-end evidence
+
+See [the regression results and fresh screenshots](e2e/README.md). The expanded suite found and fixed a same-second snapshot selection bug and now runs as `just test-followers-e2e` (also included in `just check`).
