@@ -3,6 +3,7 @@
 // the viewer's own standing card, their neighbourhood on the board, the week's top posts, and the
 // top of the board. Every number here comes from one `getLeaderboard` call; the toggle between
 // quarter totals and this week is purely a client-side re-sort.
+import { EXTENSION_STORE_URL, WRITE_POST_URL } from "../components/links";
 import { useMemo, useState } from "react";
 import type { StandingRow, TopPost } from "@linkedin-challenge/client";
 import { useGetLeaderboard, useGetChallengeAggregate } from "@linkedin-challenge/client/react-query";
@@ -11,7 +12,6 @@ import { Rules } from "../components/rules";
 
 // Opens LinkedIn with the share box already open — the one action every nudge on this page
 // points at.
-const WRITE_POST_URL = "https://www.linkedin.com/feed/?shareActive=true";
 
 const money = (n: number) => `$${fmtInt(n)}`;
 // Challenge boundaries are stored as UTC midnight, so they are formatted in UTC — otherwise a
@@ -384,11 +384,12 @@ export function ChallengeLeaderboard({ fixedChallengeId }: { fixedChallengeId?: 
           <>
             <h2>You&rsquo;re not on the board yet</h2>
             <p className="muted">
-              Connect the browser extension so your LinkedIn posts sync here, then write a post. You
-              join the board the moment your first data arrives.
+              Install the browser extension so your LinkedIn posts sync here, then write a post. Once
+              you&rsquo;re signed in here and on LinkedIn it connects by itself, and you join the board
+              the moment your first data arrives.
             </p>
             <div className="cta">
-              <a className="cup-btn dark" href="/account">Connect the extension →</a>
+              <a className="cup-btn dark" href={EXTENSION_STORE_URL} target="_blank" rel="noreferrer">Install the extension →</a>
               <a className="cup-btn pink" href={WRITE_POST_URL} target="_blank" rel="noreferrer">Write a post →</a>
             </div>
           </>
