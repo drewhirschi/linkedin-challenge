@@ -1,5 +1,6 @@
 // Participant sign-up: redeem an invite code into a real account. Everyone signs in to see
 // anything, so this is where a participant gets the credentials they use on the web AND in the extension.
+import { EXTENSION_STORE_URL } from "../../../components/links";
 import { useJoinWithInvite } from "@linkedin-challenge/client/react-query";
 import { useState } from "react";
 
@@ -18,10 +19,13 @@ export default function Join() {
       <>
         <h1>You joined {joined.challengeName}</h1>
         <div className="notice ok">
-          Your account is ready. To start syncing, install the Challenge Sync extension and sign in
-          with the email and password you just chose.
+          Your account is ready. To start syncing, install the Challenge Sync extension. You&rsquo;re
+          already signed in here, so once LinkedIn is open in this browser it connects on its own.
         </div>
         <p>
+          <a className="btn" href={EXTENSION_STORE_URL} target="_blank" rel="noreferrer">
+            Install the extension
+          </a>{" "}
           <a className="btn" href="/">
             Go to the leaderboard
           </a>

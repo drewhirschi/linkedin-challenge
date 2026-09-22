@@ -1,6 +1,7 @@
 import { useAcceptChallengeInvite, useGetMe, useGetMyInvites, getGetChallengesQueryKey } from "@linkedin-challenge/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { fmtDate } from "../../components/format";
+import { EXTENSION_STORE_URL } from "../../components/links";
 
 export default function AccountPage() {
   const me = useGetMe();
@@ -16,6 +17,18 @@ export default function AccountPage() {
     <>
       <h1>{account.displayName}</h1>
       <p className="lede">Your account and challenge invitations.</p>
+
+      <h2>Syncing</h2>
+      <p>
+        Your LinkedIn stats reach this site through the Challenge Sync Chrome extension. Install it
+        on any browser where you&rsquo;re signed in here and on LinkedIn, and it connects by itself.
+        Several browsers can sync the same account.
+      </p>
+      <p>
+        <a className="btn" href={EXTENSION_STORE_URL} target="_blank" rel="noreferrer">
+          Get the extension from the Chrome Web Store
+        </a>
+      </p>
 
       <h2>Challenge invitations</h2>
       {data.data.invites.length === 0 ? (

@@ -1,5 +1,11 @@
 # Distributing the Chrome extension
 
+The live listing is an unlisted Web Store item:
+<https://chromewebstore.google.com/detail/challenge-sync-%E2%80%94-linkedin/lipnimkomknkipidfloeigpojfilgjfh>.
+To ship an update: bump `version` in `extension/manifest.json`, merge, push the matching
+`extension-v<version>` tag, download the zip from the GitHub Release, and upload it to that item in
+the developer dashboard.
+
 Three ways to get the extension onto someone's machine, in increasing order of effort. You do **not**
 have to publish publicly, and for an internal company challenge you probably shouldn't.
 
