@@ -7,7 +7,7 @@
 // person can act on.
 import { getState, setState } from "./storage.js";
 import { SERVER_URL, SESSION_COOKIE } from "./config.js";
-import { bearer, installApiBaseUrl, linkIdentity, pushSync, signInDeviceWithSession } from "./api.js";
+import { bearer, getSyncStatus, installApiBaseUrl, linkIdentity, pushSync, signInDeviceWithSession } from "./api.js";
 
 installApiBaseUrl();
 
@@ -24,8 +24,8 @@ export async function readSessionCookie() {
 
 // Exchange the website session for this device's sync token — no second sign-in.
 //
-// Issuing rotates the token, so linking here un-links any other browser. That is the same
-// single-device model the "Unlink this device" button already implies.
+// Tokens are per device: issuing one here leaves every other browser linked, so a laptop and a
+// desktop can both sync the same account.
 //
 // Returns null when there is no usable session, so callers can send the user to the site to sign
 // in rather than surfacing an error.
@@ -63,9 +63,10 @@ export async function linkIdentityToAccount(syncToken, member) {
 
 // Upload a snapshot batch. Returns the server's response.
 //
-// A 401 here is routine rather than exceptional: the token rotates whenever the account connects
-// from anywhere else, and in development the server's database gets rebuilt out from under it. So
-// we re-exchange the website session once and retry, and only surface an error if that fails too.
+// A 401 here is routine rather than exceptional: an old install may hold a legacy token that a
+// later link rotated away, and in development the server's database gets rebuilt out from under
+// it. So we re-exchange the website session once and retry, and only surface an error if that
+// fails too.
 // Telling a user to "re-link" for something we can fix silently is just making them do our work.
 export async function pushSnapshot(payload) {
   const { syncToken } = await getState();
@@ -92,5 +93,15 @@ export async function pushSnapshot(payload) {
   }
 
   if (res.status !== 200) throw new Error(res.data?.error || `Server error (${res.status}).`);
+  return res.data;
+}
+
+// What the server knows about this account across every device. Null when this device is not
+// linked or the token is no longer accepted; callers fall back to local state.
+export async function fetchSyncStatus() {
+  const { syncToken } = await getState();
+  if (!syncToken) return null;
+  const res = await getSyncStatus(bearer(syncToken));
+  if (res.status !== 200) return null;
   return res.data;
 }

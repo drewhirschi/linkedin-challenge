@@ -7,7 +7,7 @@
 # The server URL is a build-time constant, in TWO places that must agree: SERVER_URL in config.js
 # and the matching entry in manifest.json's host_permissions. The extension reads the site's
 # session cookie, and Chrome only allows that for an origin the manifest declares — so a build with
-# one updated and not the other fails at "Connect" with no useful message. This script writes both
+# one updated and not the other fails to connect with no useful message. This script writes both
 # from a single argument, which is the whole reason it exists.
 set -euo pipefail
 cd "$(dirname "$0")"

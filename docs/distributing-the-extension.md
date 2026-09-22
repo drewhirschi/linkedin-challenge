@@ -20,7 +20,7 @@ cd extension
 The server URL is a build-time constant reflected in `SERVER_URL` in `config.js`, plus
 `host_permissions` and `homepage_url` in `manifest.json`. The extension reads the
 site's session cookie, and Chrome only permits that for an origin the manifest declares — so a build
-with one updated and not the other fails at **Connect** with no useful message. `build.sh` writes
+with one updated and not the other fails to connect with no useful message. `build.sh` writes
 all three from a single argument and then verifies they match, which is the whole reason it exists.
 
 It also refuses a plain-`http` URL that isn't localhost: the sync token is a bearer credential and

@@ -15,9 +15,10 @@
       </div>
     </header>
 
-    <!-- Unlinked: reuse the website session, or send the user there to sign in -->
+    <!-- Unlinked: linking happens by itself once both sessions exist; this view only explains
+         what is still missing, or that it is in progress. -->
     <section id="link-view" hidden>
-      <p class="lede">Connect this browser to your challenge account.</p>
+      <p class="lede" id="lede-text">Connecting this browser to your challenge account…</p>
       <!-- Both sessions are prerequisites and fail for different reasons, so each gets its own
            line with its own fix rather than one vague "not ready". -->
       <ul class="checks">
@@ -26,11 +27,12 @@
         <li id="check-li"><span class="mark">…</span> <span class="label">Signed into LinkedIn</span>
           <button class="linkish" id="fix-li" hidden>Open LinkedIn</button></li>
       </ul>
-      <button id="link-btn" class="primary">Connect</button>
+      <p id="link-error" class="error" hidden></p>
+      <button id="link-btn" class="primary" hidden>Try again</button>
       <p class="note">
-        This reads only your own LinkedIn stats (followers, your posts, your post analytics) from
-        the session already open in this browser. It never sees your LinkedIn password and never
-        posts on your behalf.
+        Once you're signed in to both, this connects on its own. It reads only your own LinkedIn
+        stats (followers, your posts, your post analytics) from the session already open in this
+        browser. It never sees your LinkedIn password and never posts on your behalf.
       </p>
     </section>
 
@@ -52,6 +54,7 @@
         <span class="k">Posts synced</span>
         <span class="v" id="posts-count">0</span>
       </div>
+      <p id="scope-line" class="note" hidden>Showing this device only — couldn't reach the server for account-wide numbers.</p>
       <p id="error-line" class="error" hidden></p>
       <button id="sync-btn" class="primary">Sync now</button>
       <p class="note">Automatic syncs run twice a day to keep background traffic light. You can sync manually whenever you like.</p>

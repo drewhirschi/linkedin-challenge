@@ -80,6 +80,7 @@ check:
     bash -n extension/build.sh
     server/scripts/test-auth-e2e.sh
     python3 server/scripts/test-followers-e2e.py
+    python3 server/scripts/test-sync-devices-e2e.py
     node scripts/test-extension-e2e.mjs
     git diff --check
 
@@ -88,6 +89,11 @@ check:
 # Set EXPECTED_FOLLOWERS=<n> to also assert the count within 15%.
 test-extension-e2e: extension-dev
     node scripts/test-extension-e2e.mjs
+
+# Verify repost comment collisions and multi-device sync tokens on an isolated local database.
+test-sync-devices-e2e:
+    cd server && cargo build --bin linkedin-challenge-server
+    python3 server/scripts/test-sync-devices-e2e.py
 
 # Exercise password auth against a real server and isolated temporary database.
 test-auth-e2e:

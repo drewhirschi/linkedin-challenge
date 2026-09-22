@@ -136,6 +136,20 @@ export const createChallenge = async (createChallengeRequest, options) => {
     const data = body ? JSON.parse(body) : {};
     return { data, status: res.status, headers: res.headers };
 };
+export const getUpdateChallengeUrl = (id) => {
+    return `/api/challenges/${id}`;
+};
+export const updateChallenge = async (id, updateChallengeRequest, options) => {
+    const res = await fetch(getUpdateChallengeUrl(id), {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: JSON.stringify(updateChallengeRequest)
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
 export const getSetChallengeFavoriteUrl = (id) => {
     return `/api/challenges/${id}/favorite`;
 };
@@ -258,6 +272,18 @@ export const getGetMyPostsUrl = (params) => {
 };
 export const getMyPosts = async (params, options) => {
     const res = await fetch(getGetMyPostsUrl(params), {
+        ...options,
+        method: 'GET'
+    });
+    const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+    const data = body ? JSON.parse(body) : {};
+    return { data, status: res.status, headers: res.headers };
+};
+export const getGetSyncStatusUrl = () => {
+    return `/api/me/sync-status`;
+};
+export const getSyncStatus = async (options) => {
+    const res = await fetch(getGetSyncStatusUrl(), {
         ...options,
         method: 'GET'
     });
