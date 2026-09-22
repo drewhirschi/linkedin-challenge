@@ -90,7 +90,7 @@ check:
 dev-profile-login:
     @command -v chromium >/dev/null || { echo "missing: chromium" >&2; exit 1; }
     @rm -f .chromium-dev-profile/SingletonLock .chromium-dev-profile/SingletonSocket .chromium-dev-profile/SingletonCookie
-    chromium --user-data-dir="$PWD/.chromium-dev-profile" --no-first-run --no-default-browser-check https://www.linkedin.com/login
+    chromium --user-data-dir="$PWD/.chromium-dev-profile" --no-first-run --no-default-browser-check https://www.linkedin.com/login || true
     @echo "Signed in? Close the window, then run: just test-extension-e2e"
 
 # Drive the extension's LinkedIn collectors in headless Chromium on the signed-in dev profile
