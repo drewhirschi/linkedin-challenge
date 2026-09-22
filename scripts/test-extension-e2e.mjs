@@ -12,7 +12,8 @@
 //   EXPECTED_FOLLOWERS=980 node scripts/test-extension-e2e.mjs   # also assert the count (±15%)
 //
 // Requires: chromium on PATH, `just extension-dev` already run (dist/unpacked exists), and the
-// dev profile signed in to LinkedIn. Talks only to LinkedIn; never to the challenge server.
+// dev profile signed in to LinkedIn — sessions expire after a couple of weeks; refresh with
+// `just dev-profile-login`. Talks only to LinkedIn; never to the challenge server.
 
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
@@ -220,7 +221,9 @@ try {
     console.log("skip no post with comments in the feed, comment collector not exercised");
   }
 } catch (e) {
-  fail(e.message);
+  if (/NOT_LOGGED_IN/.test(String(e.message))) {
+    fail("the dev profile's LinkedIn session has expired — run `just dev-profile-login`, sign in, close the window, and rerun");
+  } else fail(e.message);
 } finally {
   stop();
 }
