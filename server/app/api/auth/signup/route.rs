@@ -3,7 +3,8 @@
 use axum::{Extension, Json};
 use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use linkedin_challenge_server::auth::{
-    account_validation_error, establish_session, hash_password, member_by_email,
+    EMAIL_DOMAIN_REJECTION, account_validation_error, establish_session, hash_password,
+    member_by_email, signup_email_allowed,
 };
 use linkedin_challenge_server::enroll::enroll_in_running_challenges;
 use linkedin_challenge_server::models::{Member, Org};
@@ -42,6 +43,11 @@ pub async fn post(
 ) -> ApiResult<(HeaderMap, Json<SignupResponse>)> {
     if let Some(error) = account_validation_error(&req.name, &req.email, &req.password) {
         return Err(ApiError::bad_request(error));
+    }
+    // The platform is internal for now: only company addresses may create an account. The
+    // message is deliberately uninformative so the gate itself is not advertised.
+    if !signup_email_allowed(&req.email) {
+        return Err(ApiError::bad_request(EMAIL_DOMAIN_REJECTION));
     }
 
     let email = req.email.trim().to_lowercase();

@@ -59,8 +59,10 @@ pub fn signup_email_allowed(email: &str) -> bool {
         .is_some_and(|(_, domain)| domain.eq_ignore_ascii_case(ALLOWED_EMAIL_DOMAIN))
 }
 
-/// Shared validation for direct signup and invite redemption. Browser constraints are only a UX
-/// aid; the API remains the authority because it is callable without our form.
+/// Shared shape validation for direct signup and invite redemption. Browser constraints are only
+/// a UX aid; the API remains the authority because it is callable without our form. The domain
+/// gate ([`signup_email_allowed`]) is separate: it applies to account *creation*, and invite
+/// redemption by an existing account is not creation.
 pub fn account_validation_error(name: &str, email: &str, password: &str) -> Option<&'static str> {
     let name_len = name.trim().chars().count();
     if !(1..=100).contains(&name_len) {
@@ -74,9 +76,6 @@ pub fn account_validation_error(name: &str, email: &str, password: &str) -> Opti
         });
     if !email_valid {
         return Some("enter a valid email address");
-    }
-    if !signup_email_allowed(email) {
-        return Some(EMAIL_DOMAIN_REJECTION);
     }
     let password_len = password.chars().count();
     if password_len < 8 {
@@ -303,10 +302,7 @@ pub async fn issue_device_token(db: &mut Db, member_id: i64) -> toasty::Result<S
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        EMAIL_DOMAIN_REJECTION, account_validation_error, hash_password, signup_email_allowed,
-        verify_password,
-    };
+    use super::{account_validation_error, hash_password, signup_email_allowed, verify_password};
 
     #[test]
     fn password_hash_verifies_only_the_original_password() {
@@ -335,9 +331,7 @@ mod tests {
         assert!(!signup_email_allowed("ada@gmail.com"));
         assert!(!signup_email_allowed("ada@enzo.health.evil.com"));
         assert!(!signup_email_allowed("ada@notenzo.health"));
-        assert_eq!(
-            account_validation_error("Ada", "ada@example.com", "password1"),
-            Some(EMAIL_DOMAIN_REJECTION)
-        );
+        // Shape validation stays domain-agnostic; callers gate creation separately.
+        assert_eq!(account_validation_error("Ada", "ada@example.com", "password1"), None);
     }
 }

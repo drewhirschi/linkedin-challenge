@@ -7,7 +7,8 @@
 use axum::{Extension, Json};
 use http::{HeaderMap, HeaderValue, header::SET_COOKIE};
 use linkedin_challenge_server::auth::{
-    account_validation_error, establish_session, hash_password, member_by_email, verify_password,
+    EMAIL_DOMAIN_REJECTION, account_validation_error, establish_session, hash_password,
+    member_by_email, signup_email_allowed, verify_password,
 };
 use linkedin_challenge_server::enroll::enroll_in_running_challenges;
 use linkedin_challenge_server::models::{ChallengeMembership, Competition, Invite, Member, Org};
@@ -89,6 +90,11 @@ pub async fn post(
             (member, String::new())
         }
         None => {
+            // Redeeming with an existing account (above) is a login, not a signup, so accounts
+            // that predate the domain gate keep working. Creating one is gated like signup.
+            if !signup_email_allowed(&email) {
+                return Err(ApiError::bad_request(EMAIL_DOMAIN_REJECTION));
+            }
             let (secret, token_hash) = new_bearer_token();
             let member = toasty::create!(Member {
                 org_id: org.id,
