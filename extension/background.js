@@ -2,7 +2,7 @@
 import { SYNC_CHECK_MINUTES, SYNC_JITTER_MINUTES, MIN_SYNC_INTERVAL_MINUTES } from "./config.js";
 import { getState, setState, isLinked } from "./storage.js";
 import { collectSnapshot, getMe, getPostFeed, getPostComments, getFollowerCount, diagnose, isLinkedInSignedIn } from "./linkedin.js";
-import { isAppSignedIn, linkIdentityToAccount, pushSnapshot, signInFromSession } from "./sync.js";
+import { fetchSyncStatus, isAppSignedIn, linkIdentityToAccount, pushSnapshot, signInFromSession } from "./sync.js";
 import { SERVER_URL, LINKEDIN_ORIGIN } from "./config.js";
 
 const ALARM = "challenge-sync";
@@ -26,8 +26,47 @@ chrome.runtime.onInstalled.addListener(scheduleSync);
 chrome.runtime.onStartup.addListener(scheduleSync);
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM) runSync().catch(() => {});
+  if (alarm.name === ALARM) ensureLinked().then(() => runSync()).catch(() => {});
 });
+
+// Linking needs nothing from the person beyond being signed in to both sites, so it happens by
+// itself the first time both sessions are present — on install, at each alarm, and whenever the
+// popup opens. Nothing is stored until the server has accepted the identity, so a failure here
+// leaves the install exactly as unlinked as before and the next attempt starts clean.
+//
+// Returns the linked account, or null with a reason the popup can show.
+let linking = null;
+async function ensureLinked() {
+  if (await isLinked()) return { ok: true };
+  if (linking) return linking; // popup and alarm may both ask at once; link once
+  linking = (async () => {
+    try {
+      if (!(await isLinkedInSignedIn())) return { ok: false, needsLinkedIn: true };
+      const account = await signInFromSession();
+      if (!account) return { ok: false, needsSignIn: true };
+      const me = await getMe();
+      if (!me.memberUrn) throw new Error("Couldn't read your LinkedIn profile. Open LinkedIn and log in first.");
+      const data = await linkIdentityToAccount(account.syncToken, {
+        memberUrn: me.memberUrn,
+        publicIdentifier: me.publicIdentifier,
+        firstName: me.firstName,
+        lastName: me.lastName,
+        profileUrl: me.profileUrl,
+      });
+      await scheduleSync();
+      // Kick off a first sync right away so the user sees data immediately.
+      runSync({ manual: true }).catch(() => {});
+      return { ok: true, data };
+    } catch (err) {
+      const message = friendlyError(err);
+      await setState({ lastError: message });
+      return { ok: false, error: message };
+    } finally {
+      linking = null;
+    }
+  })();
+  return linking;
+}
 
 /** Milliseconds until the next AUTOMATIC sync is due; 0 when it's due now. */
 export async function msUntilSyncAllowed() {
@@ -94,34 +133,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case "GET_STATE":
           sendResponse({ ok: true, state: await getState() });
           break;
-        case "LINK": {
-          // Reuse the website session rather than asking for a password again. No session means
-          // the user simply isn't signed in yet — open the site and let them.
-          if (!(await isLinkedInSignedIn())) {
-            await chrome.tabs.create({ url: LINKEDIN_ORIGIN });
-            sendResponse({ ok: false, needsLinkedIn: true });
-            break;
+        case "LINK":
+          // Kept for the popup's retry path; the same flow runs unattended in ensureLinked().
+          sendResponse(await ensureLinked());
+          break;
+        case "STATUS": {
+          // Everything the popup renders, in one round trip. Links first if it can, then prefers
+          // the server's account-wide numbers over this device's local ones: a second device
+          // otherwise reads "0 posts, never synced" while the first has been syncing for weeks.
+          const link = await ensureLinked();
+          const state = await getState();
+          let remote = null;
+          if (state.syncToken) {
+            remote = await fetchSyncStatus().catch(() => null);
           }
-          const account = await signInFromSession();
-          if (!account) {
-            await chrome.tabs.create({ url: `${SERVER_URL}/auth/login` });
-            sendResponse({ ok: false, needsSignIn: true });
-            break;
-          }
-          // Then read the identity from the live LinkedIn session and bind it to that account.
-          const me = await getMe();
-          if (!me.memberUrn) throw new Error("Couldn't read your LinkedIn profile. Open LinkedIn and log in first.");
-          const data = await linkIdentityToAccount(account.syncToken, {
-            memberUrn: me.memberUrn,
-            publicIdentifier: me.publicIdentifier,
-            firstName: me.firstName,
-            lastName: me.lastName,
-            profileUrl: me.profileUrl,
-          });
-          await scheduleSync();
-          // Kick off a first sync right away so the user sees data immediately.
-          runSync({ manual: true }).catch(() => {});
-          sendResponse({ ok: true, data });
+          sendResponse({ ok: true, link, state, remote, dueInMs: await msUntilSyncAllowed() });
           break;
         }
         case "PREFLIGHT": {

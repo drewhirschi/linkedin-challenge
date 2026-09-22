@@ -65,7 +65,28 @@ export interface CommentPayload {
     commenterName?: CommentPayloadCommenterName;
     commenterUrn: string;
     createdAt?: CommentPayloadCreatedAt;
+    /** True for a reply inside a thread rather than a top-level comment. */
+    isReply?: boolean;
     urn: string;
+}
+/**
+ * How the whole company is doing — the "as a company so far" strip. Visible to every member.
+ */
+export interface CompanyStats {
+    /** Comments other people left on in-window posts. */
+    commentsSparked: number;
+    /** Sum of every scoring member's latest follower count. */
+    followerReach: number;
+    /**
+     * Members of the challenge.
+     * @minimum 0
+     */
+    members: number;
+    /**
+     * Members with at least one post inside the window.
+     * @minimum 0
+     */
+    membersPosting: number;
 }
 export interface CompetitionInfo {
     /** The scoring rules in force — this is what the "how the challenge is configured" screen reads. */
@@ -89,6 +110,8 @@ export interface CreateChallengeResponse {
 }
 export interface CreateInvitesRequest {
     emails: string[];
+    /** `participant` joins the challenge; `owner` may also manage it and invite others. */
+    role: string;
 }
 export interface CreateInvitesResponse {
     codes: string[];
@@ -124,7 +147,7 @@ export interface JoinRequest {
     password: string;
 }
 export interface JoinResponse {
-    isAdmin: boolean;
+    isOwner: boolean;
     memberId: number;
     ok: boolean;
     orgName: string;
@@ -133,7 +156,11 @@ export interface JoinResponse {
     syncToken: string;
 }
 export type LeaderboardAggregate = null | Aggregate;
+export type LeaderboardCompany = null | CompanyStats;
 export type LeaderboardCompetition = null | CompetitionInfo;
+export type LeaderboardSeason = null | Season;
+export type LeaderboardViewer = null | StandingRow;
+export type LeaderboardViewerLedger = null | Ledger;
 /**
  * The leaderboard payload: standings, the challenge, and the rules behind the numbers.
  */
@@ -141,8 +168,86 @@ export interface Leaderboard {
     aggregate?: LeaderboardAggregate;
     /** The org's other challenges, for the board's switcher. */
     challenges: CompetitionInfo[];
+    company?: LeaderboardCompany;
     competition?: LeaderboardCompetition;
+    season?: LeaderboardSeason;
     standings: StandingRow[];
+    /** The current week's three most-engaged posts. */
+    topPosts: TopPost[];
+    viewer?: LeaderboardViewer;
+    viewerLedger?: LeaderboardViewerLedger;
+    viewerMemberId: number;
+    viewerName: string;
+}
+/**
+ * A member's full accounting for one challenge: every post, every week, every rule applied.
+ */
+export interface Ledger {
+    activeWeekPoints: number;
+    /** @minimum 0 */
+    activeWeeks: number;
+    /** @minimum 0 */
+    bestStreakWeeks: number;
+    consistencyPoints: number;
+    engagementPoints: number;
+    followerCount: number;
+    /** The multiplier applied to engagement (`follower_baseline / follower_count`). */
+    followerFactor: number;
+    /** True when no follower reading exists, so engagement is not scaled at all. */
+    followersUnknown: boolean;
+    profilePoints: number;
+    showUpPoints: number;
+    streakBonus: number;
+    total: number;
+    /** Engagement before follower scaling, for the "what scaling cost you" line. */
+    unscaledEngagementPoints: number;
+    weeks: LedgerWeek[];
+}
+export type LedgerPostTextPreview = string | null;
+/**
+ * One post's line in a member's accounting.
+ */
+export interface LedgerPost {
+    /** Engagement after the cap, before follower scaling. */
+    cappedEngagement: number;
+    /** Comments by other people — what is priced. LinkedIn's total is `comments_total`. */
+    comments: number;
+    commentsTotal: number;
+    /** False when the post fell outside the best `max_posts_per_week` for its week. */
+    counted: boolean;
+    impressions: number;
+    isRepost: boolean;
+    /** True when no snapshot has been captured for it yet. */
+    noData: boolean;
+    permalink: string;
+    postId: number;
+    postedAt: number;
+    /** Engagement before the cap. */
+    rawEngagement: number;
+    reactions: number;
+    reposts: number;
+    saves: number;
+    /** Engagement after follower scaling — what lands in the total when counted. */
+    scaledEngagement: number;
+    sends: number;
+    /** Show-up points for this post when counted. */
+    showUpPoints: number;
+    textPreview?: LedgerPostTextPreview;
+}
+/**
+ * One scoring week in a member's accounting.
+ */
+export interface LedgerWeek {
+    active: boolean;
+    activeWeekPoints: number;
+    endAt: number;
+    engagementPoints: number;
+    posts: LedgerPost[];
+    showUpPoints: number;
+    startAt: number;
+    total: number;
+    /** 1-based. */
+    week: number;
 }
 export interface LinkRequest {
     member: MemberInfo;
@@ -166,27 +271,23 @@ export type MeResponseDisplayName = string | null;
  */
 export type MeResponseImpersonatedBy = string | null;
 export type MeResponseMemberId = number | null;
-export type MeResponseOrgName = string | null;
-export type MeResponseOrgSlug = string | null;
 export interface MeResponse {
     displayName?: MeResponseDisplayName;
     /** The system admin really driving this session, when it is an impersonation. */
     impersonatedBy?: MeResponseImpersonatedBy;
-    /** Whether this member administers their org — unlocks the Admin section. */
-    isAdmin: boolean;
     /** Whether this member operates the product — unlocks the System panel. */
     isSystemAdmin: boolean;
     memberId?: MeResponseMemberId;
-    orgName?: MeResponseOrgName;
-    orgSlug?: MeResponseOrgSlug;
     signedIn: boolean;
 }
 export type MemberDetailCompetition = null | CompetitionInfo;
+export type MemberDetailFollowerCount = number | null;
 export type MemberDetailProfileUrl = string | null;
 export type MemberDetailStanding = null | StandingRow;
 export interface MemberDetail {
     competition?: MemberDetailCompetition;
     displayName: string;
+    followerCount?: MemberDetailFollowerCount;
     memberId: number;
     /** Posts we hold that fall outside the competition window. */
     outsideWindow: PostStat[];
@@ -248,7 +349,9 @@ export interface PendingChallengeInvite {
     invitedBy: string;
     startAt: number;
 }
+export type PostPageFollowerCount = number | null;
 export interface PostPage {
+    followerCount?: PostPageFollowerCount;
     /** @minimum 0 */
     page: number;
     /** @minimum 0 */
@@ -306,26 +409,59 @@ export interface ProfilePayload {
     profileViews?: ProfilePayloadProfileViews;
 }
 /**
- * Per-competition scoring parameters, stored as JSON on the `Competition` row.
+ * Per-competition scoring parameters, stored as typed columns on the `Competition` row.
  */
 export interface ScoringConfig {
+    /** A post's engagement counts fully up to this many points; 0 means no cap. */
+    engagementCap: number;
+    /** Rate at which engagement beyond the cap keeps earning (0.5 = half rate). */
+    engagementOverCapRate: number;
     followerBaseline: number;
     /**
      * Posts beyond this many per week don't score (only the highest-scoring ones count).
      * @minimum 0
      */
     maxPostsPerWeek: number;
-    /** If true, post points are scaled by `follower_baseline / follower_count`. */
+    /** If true, engagement points are scaled by `follower_baseline / follower_count`. */
     normalizeByFollowers: boolean;
+    participationPosts: number;
+    /** "Keep showing up": points for every week with at least one post. */
+    perActiveWeek: number;
     perComment: number;
     perFollowerGained: number;
     perImpression: number;
+    /** "Show up": points for each post, up to `max_posts_per_week` a week. */
+    perPost: number;
     perProfileView: number;
     perReaction: number;
     perRepost: number;
     perSave: number;
     /** A "send" is a private share — high intent, so usually worth more than a public repost. */
     perSend: number;
+    /** Prize money, in whole dollars; 0 hides the prize. */
+    prizeFirst: number;
+    /** Guaranteed to everyone who posts `participation_posts` times or more in the window. */
+    prizeParticipation: number;
+    prizeSecond: number;
+    prizeThird: number;
+    streakLongBonus: number;
+    /** @minimum 0 */
+    streakLongWeeks: number;
+    streakShortBonus: number;
+    /** @minimum 0 */
+    streakShortWeeks: number;
+}
+/**
+ * Where the challenge is in its calendar.
+ */
+export interface Season {
+    /** When the server computed this board (unix seconds). */
+    asOf: number;
+    /** 0–1 share of the window elapsed. */
+    progress: number;
+    /** 1-based scoring week that today falls in (clamped to the window). */
+    week: number;
+    weeks: number;
 }
 export interface SessionDeviceRequest {
     /** Value of the `session` cookie for this server. */
@@ -356,19 +492,40 @@ export interface SignupResponse {
 }
 export type StandingRowProfileUrl = string | null;
 export interface StandingRow {
+    /** @minimum 0 */
+    activeWeeks: number;
+    /** @minimum 0 */
+    bestStreakWeeks: number;
+    /** "Keep showing up": active-week points plus the streak bonus. */
+    consistencyPoints: number;
     displayName: string;
+    /** Engagement points after the cap and follower scaling. */
+    engagementPoints: number;
     followerCount: number;
+    /** Followers gained across the window so far. */
+    followerGrowth: number;
+    followersUnknown: boolean;
     /** @minimum 0 */
     gradedPosts: number;
     memberId: number;
+    /** `show_up + engagement` — everything the posts themselves earned. */
     postPoints: number;
     profilePoints: number;
     profileUrl?: StandingRowProfileUrl;
     /** @minimum 0 */
     rank: number;
+    /** "Show up": points for posting, up to the weekly cap. */
+    showUpPoints: number;
+    /**
+     * Consecutive active weeks running up to now.
+     * @minimum 0
+     */
+    streakWeeks: number;
     total: number;
     /** @minimum 0 */
     totalPosts: number;
+    /** Points earned in the current scoring week. */
+    weekPoints: number;
 }
 export interface StopImpersonationResponse {
     displayName: string;
@@ -379,6 +536,9 @@ export interface SyncRequest {
     capturedAt?: SyncRequestCapturedAt;
     /** Nested originals included in normalized reshare responses, but not authored by this member. */
     excludedPostUrns?: string[];
+    /** True only when LinkedIn returned fewer than the requested page size, making absence from
+  `posts` evidence of deletion rather than pagination. */
+    postFeedComplete?: boolean;
     posts: PostPayload[];
     profile: ProfilePayload;
 }
@@ -388,7 +548,24 @@ export interface SyncResponse {
     /** @minimum 0 */
     postsIngested: number;
 }
+/**
+ * Unix seconds of the most recent sync from any device, or null if none yet.
+ */
+export type SyncStatusResponseLastSyncAt = number | null;
+export interface SyncStatusResponse {
+    displayName: string;
+    /** Unix seconds of the most recent sync from any device, or null if none yet. */
+    lastSyncAt: SyncStatusResponseLastSyncAt;
+    /** True once a LinkedIn identity is bound to the account. */
+    linked: boolean;
+    /**
+     * Posts on file across every device that has ever synced this account.
+     * @minimum 0
+     */
+    postsCount: number;
+}
 export type SystemMemberRowEmail = string | null;
+export type SystemMemberRowFollowerCount = number | null;
 /**
  * Unix seconds of the newest profile snapshot — a proxy for "is the extension syncing".
  */
@@ -400,26 +577,40 @@ export interface SystemMemberRow {
     createdAt: number;
     displayName: string;
     email?: SystemMemberRowEmail;
+    followerCount?: SystemMemberRowFollowerCount;
     id: number;
-    isAdmin: boolean;
     isSystemAdmin: boolean;
     /** Unix seconds of the newest profile snapshot — a proxy for "is the extension syncing". */
     lastSyncedAt?: SystemMemberRowLastSyncedAt;
-}
-export type SystemOrgRowActiveChallenge = string | null;
-/**
- * One org and everyone in it.
- */
-export interface SystemOrgRow {
-    activeChallenge?: SystemOrgRowActiveChallenge;
-    createdAt: number;
-    id: number;
-    members: SystemMemberRow[];
-    name: string;
-    slug: string;
+    ownsChallenge: boolean;
 }
 export interface SystemOverview {
-    orgs: SystemOrgRow[];
+    members: SystemMemberRow[];
+}
+export type TopPostTextPreview = string | null;
+/**
+ * One of the week's standout posts.
+ */
+export interface TopPost {
+    comments: number;
+    displayName: string;
+    memberId: number;
+    permalink: string;
+    /** Engagement points before follower scaling — what makes it a top post. */
+    points: number;
+    postId: number;
+    postedAt: number;
+    reactions: number;
+    textPreview?: TopPostTextPreview;
+}
+export interface UpdateChallengeRequest {
+    config: ScoringConfig;
+    /** `YYYY-MM-DD`, inclusive. */
+    end: string;
+    isActive: boolean;
+    name: string;
+    /** `YYYY-MM-DD` */
+    start: string;
 }
 /**
  * Posts bucketed by the same weekly buckets the scoring uses, so the grouping matches how
@@ -653,6 +844,23 @@ export type createChallengeResponseError = (createChallengeResponseDefault) & {
 export type createChallengeResponse = (createChallengeResponseSuccess | createChallengeResponseError);
 export declare const getCreateChallengeUrl: () => string;
 export declare const createChallenge: (createChallengeRequest: CreateChallengeRequest, options?: RequestInit) => Promise<createChallengeResponse>;
+export type updateChallengeResponse200 = {
+    data: CompetitionInfo;
+    status: 200;
+};
+export type updateChallengeResponseDefault = {
+    data: ApiError;
+    status: Exclude<HTTPStatusCodes, 200>;
+};
+export type updateChallengeResponseSuccess = (updateChallengeResponse200) & {
+    headers: Headers;
+};
+export type updateChallengeResponseError = (updateChallengeResponseDefault) & {
+    headers: Headers;
+};
+export type updateChallengeResponse = (updateChallengeResponseSuccess | updateChallengeResponseError);
+export declare const getUpdateChallengeUrl: (id: number) => string;
+export declare const updateChallenge: (id: number, updateChallengeRequest: UpdateChallengeRequest, options?: RequestInit) => Promise<updateChallengeResponse>;
 export type setChallengeFavoriteResponse200 = {
     data: FavoriteChallengeResponse;
     status: 200;
@@ -806,6 +1014,23 @@ export type getMyPostsResponseError = (getMyPostsResponseDefault) & {
 export type getMyPostsResponse = (getMyPostsResponseSuccess | getMyPostsResponseError);
 export declare const getGetMyPostsUrl: (params?: GetMyPostsParams) => string;
 export declare const getMyPosts: (params?: GetMyPostsParams, options?: RequestInit) => Promise<getMyPostsResponse>;
+export type getSyncStatusResponse200 = {
+    data: SyncStatusResponse;
+    status: 200;
+};
+export type getSyncStatusResponse401 = {
+    data: ApiError;
+    status: 401;
+};
+export type getSyncStatusResponseSuccess = (getSyncStatusResponse200) & {
+    headers: Headers;
+};
+export type getSyncStatusResponseError = (getSyncStatusResponse401) & {
+    headers: Headers;
+};
+export type getSyncStatusResponse = (getSyncStatusResponseSuccess | getSyncStatusResponseError);
+export declare const getGetSyncStatusUrl: () => string;
+export declare const getSyncStatus: (options?: RequestInit) => Promise<getSyncStatusResponse>;
 export type getMemberDetailResponse200 = {
     data: MemberDetail;
     status: 200;

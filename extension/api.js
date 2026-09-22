@@ -13,6 +13,7 @@
 import { SERVER_URL } from "./config.js";
 
 export {
+  getSyncStatus,
   linkIdentity,
   pushSync,
   signInDeviceWithSession,

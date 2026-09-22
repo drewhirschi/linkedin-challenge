@@ -15,7 +15,7 @@ use argon2::{Argon2, PasswordHasher, PasswordVerifier};
 use http::HeaderMap;
 use toasty::Db;
 
-use crate::models::{AdminSession, Member};
+use crate::models::{AdminSession, DeviceToken, Member};
 use crate::util::{hash_bearer_token, new_bearer_token, now_unix};
 
 /// Session lifetime (30 days), applied to both the cookie and the stored row.
@@ -240,15 +240,45 @@ fn bearer_token(headers: &HeaderMap) -> Option<&str> {
 }
 
 /// The member whose sync token authenticates this request, or None.
+///
+/// Per-device tokens are checked first; the single legacy hash on the member row is still
+/// honoured so extensions linked before device tokens existed keep syncing without relinking.
 pub async fn member_from_bearer(db: &mut Db, headers: &HeaderMap) -> Option<Member> {
     let raw = bearer_token(headers)?;
     let hash = hash_bearer_token(raw);
+    if let Ok(Some(device)) = DeviceToken::filter_by_token_hash(&hash).first().exec(&mut *db).await {
+        // Best effort: a failed bookkeeping write must not fail the sync itself.
+        let _ = toasty::update!(DeviceToken::filter_by_token_hash(&hash) { last_used_at: now_unix() })
+            .exec(&mut *db)
+            .await;
+        return Member::filter_by_id(device.member_id)
+            .first()
+            .exec(&mut *db)
+            .await
+            .ok()
+            .flatten();
+    }
     Member::filter_by_api_token_hash(&hash)
         .first()
         .exec(&mut *db)
         .await
         .ok()
         .flatten()
+}
+
+/// Mint a sync token for one more device of `member_id`, leaving every existing device linked.
+pub async fn issue_device_token(db: &mut Db, member_id: i64) -> toasty::Result<String> {
+    let (secret, token_hash) = new_bearer_token();
+    let now = now_unix();
+    toasty::create!(DeviceToken {
+        token_hash,
+        member_id,
+        created_at: now,
+        last_used_at: now,
+    })
+    .exec(db)
+    .await?;
+    Ok(secret)
 }
 
 #[cfg(test)]

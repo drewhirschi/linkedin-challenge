@@ -205,13 +205,20 @@ pub async fn post(
             .collect()
     };
 
-    // Comments already on file for this member's posts, so the upsert below can skip known URNs
-    // without a query per comment.
-    let post_ids: Vec<i64> = stored.values().map(|post| post.id).collect();
-    let mut known_comments: HashSet<String> = if post_ids.is_empty() {
+    // Comment URNs already on file, looked up GLOBALLY by the URNs in this batch. A repost shows
+    // the original's comments under the reposter's feed too, so the same comment URN arrives from
+    // two members; scoping this to the current member's posts is how a second member's sync used
+    // to die on the unique index every time.
+    let batch_comment_urns: Vec<String> = req
+        .posts
+        .iter()
+        .filter(|post| !post.is_repost)
+        .flat_map(|post| post.comments.iter().map(|comment| comment.urn.clone()))
+        .collect();
+    let mut known_comments: HashSet<String> = if batch_comment_urns.is_empty() {
         HashSet::new()
     } else {
-        PostComment::filter(PostComment::fields().post_id().in_list(post_ids))
+        PostComment::filter(PostComment::fields().urn().in_list(batch_comment_urns))
             .exec(&mut db)
             .await?
             .into_iter()
@@ -289,8 +296,11 @@ pub async fn post(
 
         // Comments are facts, not readings: upsert by URN so a re-sync doesn't duplicate them.
         // `is_self` is decided here, against the member who owns the post, so scoring never has to
-        // re-derive it from a URN comparison that could drift.
-        for c in &p.comments {
+        // re-derive it from a URN comparison that could drift. Comments on a repost belong to the
+        // original author's post, so none are stored under the reposter's; scoring then uses
+        // LinkedIn's own total for that post, as it does for any post with no rows read.
+        let comments: &[CommentPayload] = if p.is_repost { &[] } else { &p.comments };
+        for c in comments {
             if !known_comments.insert(c.urn.clone()) {
                 continue;
             }

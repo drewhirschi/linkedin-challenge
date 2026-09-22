@@ -32,9 +32,9 @@ function fmtDueIn(ms) {
   return mins < 60 ? `in ${mins}m` : `in about ${Math.round(mins / 60)}h`;
 }
 
-// Reflect both prerequisites before the user clicks, so a failure is diagnosed rather than guessed.
-async function renderPreflight() {
-  const res = await send({ type: "PREFLIGHT" });
+// Which prerequisite is missing, so a failure is diagnosed rather than guessed. Linking itself
+// is the worker's job and needs no click; this only explains why it hasn't happened yet.
+function renderLinkView(link) {
   const set = (id, good, fixId) => {
     const li = $(id);
     li.classList.toggle("ok", good);
@@ -42,30 +42,44 @@ async function renderPreflight() {
     li.querySelector(".mark").textContent = good ? "✓" : "✕";
     $(fixId).hidden = good;
   };
-  set("check-app", res.appSignedIn, "fix-app");
-  set("check-li", res.linkedInSignedIn, "fix-li");
-  $("link-btn").disabled = !(res.appSignedIn && res.linkedInSignedIn);
+  set("check-app", !link.needsSignIn, "fix-app");
+  set("check-li", !link.needsLinkedIn, "fix-li");
+  const failed = Boolean(link.error);
+  $("lede-text").textContent = failed
+    ? "Couldn't connect this browser."
+    : link.needsSignIn || link.needsLinkedIn
+      ? "Sign in to both sites and this connects on its own."
+      : "Connecting this browser to your challenge account…";
+  $("link-error").hidden = !failed;
+  $("link-error").textContent = link.error || "";
+  $("link-btn").hidden = !failed;
+}
+
+// The server sees every device, so its numbers win; local state is the fallback when it can't be
+// reached, and the popup says so rather than passing off one device's count as the account's.
+function renderStatusView(state, remote, dueInMs) {
+  $("display-name").textContent = remote?.displayName || state.displayName || "—";
+  const lastSync = remote?.lastSyncAt ? new Date(remote.lastSyncAt * 1000).toISOString() : state.lastSyncAt;
+  $("last-sync").textContent = fmtTime(lastSync);
+  $("next-sync").textContent = fmtDueIn(dueInMs ?? 0);
+  $("posts-count").textContent = remote ? remote.postsCount : (state.lastPostsIngested ?? 0);
+  $("scope-line").hidden = Boolean(remote);
+  const errLine = $("error-line");
+  errLine.hidden = !state.lastError;
+  errLine.textContent = state.lastError || "";
+  $("diag-btn").classList.toggle("diagnostic-error", Boolean(state.lastError));
+  $("diag-btn").textContent = state.lastError ? "Sync failed — open diagnostics" : "Open diagnostics";
 }
 
 async function render() {
-  const { state } = await send({ type: "GET_STATE" });
-  const linked = Boolean(state.syncToken);
+  const res = await send({ type: "STATUS" });
+  const linked = Boolean(res.state.syncToken);
   $("link-view").hidden = linked;
   $("status-view").hidden = !linked;
-
   if (linked) {
-    $("display-name").textContent = state.displayName || "—";
-    $("last-sync").textContent = fmtTime(state.lastSyncAt);
-    const due = await send({ type: "SYNC_DUE_IN" });
-    $("next-sync").textContent = fmtDueIn(due.ms ?? 0);
-    $("posts-count").textContent = state.lastPostsIngested ?? 0;
-    const errLine = $("error-line");
-    errLine.hidden = !state.lastError;
-    errLine.textContent = state.lastError || "";
-    $("diag-btn").classList.toggle("diagnostic-error", Boolean(state.lastError));
-    $("diag-btn").textContent = state.lastError ? "Sync failed — open diagnostics" : "Open diagnostics";
+    renderStatusView(res.state, res.remote, res.dueInMs);
   } else {
-    await renderPreflight();
+    renderLinkView(res.link || {});
   }
 }
 
@@ -79,27 +93,18 @@ $("fix-li").addEventListener("click", async () => {
   window.close();
 });
 
+// Only shown after an automatic attempt failed outright — a retry path, not a step.
 $("link-btn").addEventListener("click", async () => {
   const btn = $("link-btn");
   btn.disabled = true;
   btn.textContent = "Connecting…";
   try {
     const res = await send({ type: "LINK" });
-    if (res.needsLinkedIn) {
-      toast("Opened LinkedIn — log in there, then press Connect.", "err");
-      return;
-    }
-    if (res.needsSignIn) {
-      toast("Opened the sign-in page — come back and press Connect.", "err");
-      return;
-    }
-    if (!res.ok) throw new Error(res.error);
-    toast("Connected — syncing your stats…", "ok");
-  } catch (e) {
-    toast(e.message || "Couldn't connect.", "err");
+    if (res.ok) toast("Connected — syncing your stats…", "ok");
+    else if (res.error) toast(res.error, "err");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Connect";
+    btn.textContent = "Try again";
     render();
   }
 });

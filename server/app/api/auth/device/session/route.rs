@@ -1,7 +1,8 @@
 //! `POST /api/auth/device/session` — turn an existing website session into a device sync token.
 //!
 //! Lets the extension notice you are already signed in on the site and link without asking for a
-//! password again. The extension reads the session cookie out of the browser's jar with
+//! password again. Each call mints a token for one more device; it never revokes the others, so a
+//! laptop and a desktop can both sync the same account. The extension reads the session cookie out of the browser's jar with
 //! `chrome.cookies` (it holds an explicit host permission for the server) and posts the value here.
 //!
 //! It arrives in the body rather than as a `Cookie` header because `fetch` cannot set that header
@@ -9,9 +10,7 @@
 //! reflecting arbitrary origins and opening a CSRF surface on every cookie-authed route.
 
 use axum::{Extension, Json};
-use linkedin_challenge_server::auth::member_from_session_token;
-use linkedin_challenge_server::models::Member;
-use linkedin_challenge_server::util::new_bearer_token;
+use linkedin_challenge_server::auth::{issue_device_token, member_from_session_token};
 use linkedin_challenge_server::web::ApiError;
 use serde::{Deserialize, Serialize};
 use toasty::Db;
@@ -51,10 +50,7 @@ pub async fn post(
         return Err(ApiError::unauthorized("not signed in"));
     };
 
-    let (secret, token_hash) = new_bearer_token();
-    toasty::update!(Member::filter_by_id(member.id) { api_token_hash: token_hash })
-        .exec(&mut db)
-        .await?;
+    let secret = issue_device_token(&mut db, member.id).await?;
 
     Ok(Json(SessionDeviceResponse {
         sync_token: secret,

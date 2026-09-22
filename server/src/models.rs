@@ -134,6 +134,17 @@ pub async fn connect() -> Db {
         "CREATE INDEX IF NOT EXISTS post_comments_post_id ON post_comments (post_id)",
     )
     .await;
+    // Same statement on both databases: the key is the token hash, so there is no serial column.
+    execute_migration(
+        &mut db,
+        "CREATE TABLE IF NOT EXISTS device_tokens (token_hash TEXT PRIMARY KEY, member_id BIGINT NOT NULL, created_at BIGINT NOT NULL, last_used_at BIGINT NOT NULL)",
+    )
+    .await;
+    execute_migration(
+        &mut db,
+        "CREATE INDEX IF NOT EXISTS device_tokens_member_id ON device_tokens (member_id)",
+    )
+    .await;
     add_column(
         &mut db,
         "ALTER TABLE challenge_memberships ADD COLUMN is_favorite BOOLEAN NOT NULL DEFAULT FALSE",
@@ -508,4 +519,18 @@ pub struct AdminSession {
     /// the system admin's own member id. Lets the UI show who is really acting, and lets "stop
     /// impersonating" return to the operator's own account.
     pub impersonator_id: Option<i64>,
+}
+
+/// One extension install's sync credential. A member may have several — a laptop and a desktop
+/// both syncing the same account — so issuing a new one must never revoke the others. The
+/// legacy single `Member.api_token_hash` is still honoured for installs linked before this table
+/// existed; new links land here.
+#[derive(Debug, toasty::Model)]
+pub struct DeviceToken {
+    #[key]
+    pub token_hash: String,
+    #[index]
+    pub member_id: i64,
+    pub created_at: i64,
+    pub last_used_at: i64,
 }
