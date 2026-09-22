@@ -18,6 +18,7 @@ fn is_public(path: &str) -> bool {
         || path == "/api/health"
         || path == "/api/link"
         || path == "/api/sync"
+        || path == "/api/me/sync-status"
         // Bundles, stylesheet, favicons. Blocking these would break the login page itself.
         || path.starts_with("/dist/")
         || path.starts_with("/favicon.")

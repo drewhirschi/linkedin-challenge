@@ -98,11 +98,14 @@ with tempfile.TemporaryDirectory(prefix='sync-devices-e2e-') as directory:
         check('second device receives its own token', second_token != ada_token)
         ada.sync(ada_token, [post('urn:li:activity:1', [shared]), post('urn:li:activity:2', [])])
         check('first device is still accepted after the second linked', True)
-        status_first = ada.request('/api/me/sync-status', token=ada_token)
-        status_second = ada.request('/api/me/sync-status', token=second_token)
+        # The extension has no site cookie, only the bearer token, so this must pass the root
+        # sign-in guard on the token alone — a cookie-less client is the honest caller here.
+        device = Client()
+        status_first = device.request('/api/me/sync-status', token=ada_token)
+        status_second = device.request('/api/me/sync-status', token=second_token)
         check('a freshly linked device sees the account-wide post count, not zero',
               status_second['postsCount'] == status_first['postsCount'] >= 2 and status_second['lastSyncAt'] is not None)
-        ada.request('/api/me/sync-status', token='st_bogus', status=401)
+        device.request('/api/me/sync-status', token='st_bogus', status=401)
         check('unknown token is rejected on sync-status', True)
     finally:
         process.terminate()
