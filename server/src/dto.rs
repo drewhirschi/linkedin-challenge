@@ -739,7 +739,7 @@ fn post_stats(data: &Dataset, post: &Post) -> (PostStat, i64) {
             impressions: latest.and_then(|s| s.impressions).unwrap_or(0),
             reactions: latest.and_then(|s| s.reactions).unwrap_or(0),
             comments: latest.and_then(|s| s.comments).unwrap_or(0),
-            comments_by_others: data.scored_comments(post.id, total),
+            comments_by_others: data.scored_comments(post.id, total, post.comments_complete),
             reposts: latest.and_then(|s| s.reposts).unwrap_or(0),
             sends: latest.and_then(|s| s.sends).unwrap_or(0),
             saves: latest.and_then(|s| s.saves).unwrap_or(0),

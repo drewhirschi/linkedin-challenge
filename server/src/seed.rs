@@ -420,6 +420,7 @@ pub async fn seed_demo(db: &mut Db) -> toasty::Result<()> {
                 text_preview: Some(format!("{name}'s post #{}", i + 1)),
                 image_urls_json: None,
                 is_repost: false,
+                comments_complete: false,
             })
             .exec(&mut *db)
             .await?;

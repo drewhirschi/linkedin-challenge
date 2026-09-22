@@ -78,6 +78,11 @@ pub struct PostPayload {
     /// didn't read any this time — it is not a claim that the post has none.
     #[serde(default)]
     pub comments: Vec<CommentPayload>,
+    /// True when `comments` is the whole thread (read through LinkedIn's comment pager), as
+    /// opposed to the handful the rendered page shows. Only a complete read lets scoring count
+    /// distinct commenters; older extensions never send it and keep the total-based formula.
+    #[serde(default)]
+    pub comments_complete: bool,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -247,6 +252,9 @@ pub async fn post(
                     text_preview: text_preview.clone(),
                     image_urls_json: image_urls_json.clone(),
                     is_repost: p.is_repost,
+                    // Sticky: rows are only ever added, so a thread read fully once stays
+                    // fully known even if a later sync had to fall back to the page.
+                    comments_complete: post.comments_complete || p.comments_complete,
                 })
                 .exec(&mut db)
                 .await?;
@@ -262,6 +270,7 @@ pub async fn post(
                     text_preview,
                     image_urls_json,
                     is_repost: p.is_repost,
+                    comments_complete: p.comments_complete,
                 })
                 .exec(&mut db)
                 .await?;

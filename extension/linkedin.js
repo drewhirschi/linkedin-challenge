@@ -389,9 +389,16 @@ const REPLIES_REQUEST = "com.linkedin.sdui.feed.update.comments.fetchReplies";
 const COMMENT_PAGE_SIZE = 50;
 const COMMENT_MAX_PAGES = 10;
 
-export async function getPostComments(activityUrn, { max = 1000 } = {}) {
+export async function getPostComments(activityUrn, options) {
+  return (await getPostCommentsDetailed(activityUrn, options)).comments;
+}
+
+// `complete` is true only when the whole thread was read through the SDUI pager. The server
+// scores distinct commenters only from complete reads; a first-page sample from the fallback
+// keeps the older total-minus-author formula so a transient failure cannot shrink a score.
+export async function getPostCommentsDetailed(activityUrn, { max = 1000 } = {}) {
   const id = activityId(activityUrn);
-  if (!id) return [];
+  if (!id) return { comments: [], complete: false };
   let html = null;
   try {
     const res = await linkedinFetch(`/feed/update/urn:li:activity:${id}/`);
@@ -408,7 +415,7 @@ export async function getPostComments(activityUrn, { max = 1000 } = {}) {
     try {
       const comments = await getPostCommentsSdui(id, html, max);
       pushDiagnostic({ activityId: id, path: "sdui", attempt, count: comments.length });
-      if (comments.length > 0) return comments;
+      if (comments.length > 0) return { comments, complete: true };
     } catch (error) {
       if (String(error?.message) === "NOT_LOGGED_IN") throw error;
       lastError = String(error?.message || error);
@@ -416,7 +423,7 @@ export async function getPostComments(activityUrn, { max = 1000 } = {}) {
   }
   const rendered = html ? parseRenderedComments(html, max) : [];
   pushDiagnostic({ activityId: id, path: "rendered", count: rendered.length, error: lastError });
-  return rendered;
+  return { comments: rendered, complete: false };
 }
 
 // Which path each post's comments came from, for the e2e and the diagnostics report. Bounded so
@@ -1032,10 +1039,13 @@ export async function collectSnapshot() {
     // Who commented, so the author's own replies can be left out of the score. Only worth a
     // request when LinkedIn says there is something to read.
     if ((post.metrics.comments ?? 0) > 0) {
-      post.comments = await getPostComments(post.urn);
+      const read = await getPostCommentsDetailed(post.urn);
+      post.comments = read.comments;
+      post.commentsComplete = read.complete;
       await sleep(REQUEST_DELAY_MS);
     } else {
       post.comments = [];
+      post.commentsComplete = true; // nothing to read is a complete read
     }
   }
 

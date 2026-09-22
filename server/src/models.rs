@@ -43,6 +43,11 @@ pub async fn connect() -> Db {
     add_column(&mut db, "ALTER TABLE posts ADD COLUMN image_urls_json TEXT").await;
     add_column(
         &mut db,
+        "ALTER TABLE posts ADD COLUMN comments_complete BOOLEAN NOT NULL DEFAULT FALSE",
+    )
+    .await;
+    add_column(
+        &mut db,
         "ALTER TABLE members ADD COLUMN is_system_admin BOOLEAN NOT NULL DEFAULT FALSE",
     )
     .await;
@@ -408,6 +413,9 @@ pub struct Post {
     /// and production PostgreSQL drivers, where native array types differ.
     pub image_urls_json: Option<String>,
     pub is_repost: bool,
+    /// The stored comment rows are the whole thread, not the rendered page's first few. Set by
+    /// a sync whose extension read the thread through LinkedIn's comment pager; sticky once true.
+    pub comments_complete: bool,
 
     #[has_many]
     pub snapshots: toasty::Deferred<Vec<PostSnapshot>>,
