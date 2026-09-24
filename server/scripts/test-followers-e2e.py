@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix='followers-e2e-') as directory:
         check('known reading is not marked unknown', not standing['followersUnknown'])
         # A controlled one-post fixture provides an independent scoring oracle.
         fixture = Client()
-        fixture.request('/api/auth/signup', {'name': 'Follower E2E', 'email': 'followers@e2e.test', 'password': 'FollowerE2E!123'})
+        fixture.request('/api/auth/signup', {'name': 'Follower E2E', 'email': 'followers-e2e@enzo.health', 'password': 'FollowerE2E!123'})
         fid = fixture.request('/api/auth/me')['memberId']
         today = dt.datetime.now(dt.timezone.utc).date()
         start, end = str(today - dt.timedelta(days=2)), str(today + dt.timedelta(days=2))

@@ -84,9 +84,18 @@ check:
     node scripts/test-extension-e2e.mjs
     git diff --check
 
+# LinkedIn sessions expire after a couple of weeks; then test-extension-e2e fails NOT_LOGGED_IN.
+# Opens a visible window on the e2e profile at the login page: sign in, then close the window.
+# Refresh the extension e2e's Chrome profile (.chromium-dev-profile) LinkedIn login.
+dev-profile-login:
+    @command -v chromium >/dev/null || { echo "missing: chromium" >&2; exit 1; }
+    @rm -f .chromium-dev-profile/SingletonLock .chromium-dev-profile/SingletonSocket .chromium-dev-profile/SingletonCookie
+    chromium --user-data-dir="$PWD/.chromium-dev-profile" --no-first-run --no-default-browser-check https://www.linkedin.com/login || true
+    @echo "Signed in? Close the window, then run: just test-extension-e2e"
+
 # Drive the extension's LinkedIn collectors in headless Chromium on the signed-in dev profile
 # (.chromium-dev-profile) and assert the follower count, posts, and comments come back right.
-# Set EXPECTED_FOLLOWERS=<n> to also assert the count within 15%.
+# Set EXPECTED_FOLLOWERS=<n> to also assert the count within 15%. Session expired? `just dev-profile-login`.
 test-extension-e2e: extension-dev
     node scripts/test-extension-e2e.mjs
 

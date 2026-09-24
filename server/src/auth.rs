@@ -42,8 +42,27 @@ pub fn verify_password(pw: &str, hash: &str) -> bool {
     }
 }
 
-/// Shared validation for direct signup and invite redemption. Browser constraints are only a UX
-/// aid; the API remains the authority because it is callable without our form.
+/// The only email domain allowed to create an account right now. The platform is internal to
+/// Enzo for the moment; anyone else gets a deliberately uninformative rejection.
+pub const ALLOWED_EMAIL_DOMAIN: &str = "enzo.health";
+
+/// Rejection shown for an email outside [`ALLOWED_EMAIL_DOMAIN`]. Intentionally does not say why.
+pub const EMAIL_DOMAIN_REJECTION: &str =
+    "Your email is not valid. Please contact Drew or Jason if they fail to sign up.";
+
+/// Whether a new account may be created for this email (see [`ALLOWED_EMAIL_DOMAIN`]).
+/// Existing accounts on other domains are unaffected: this gates creation, not login.
+pub fn signup_email_allowed(email: &str) -> bool {
+    email
+        .trim()
+        .rsplit_once('@')
+        .is_some_and(|(_, domain)| domain.eq_ignore_ascii_case(ALLOWED_EMAIL_DOMAIN))
+}
+
+/// Shared shape validation for direct signup and invite redemption. Browser constraints are only
+/// a UX aid; the API remains the authority because it is callable without our form. The domain
+/// gate ([`signup_email_allowed`]) is separate: it applies to account *creation*, and invite
+/// redemption by an existing account is not creation.
 pub fn account_validation_error(name: &str, email: &str, password: &str) -> Option<&'static str> {
     let name_len = name.trim().chars().count();
     if !(1..=100).contains(&name_len) {
@@ -283,7 +302,7 @@ pub async fn issue_device_token(db: &mut Db, member_id: i64) -> toasty::Result<S
 
 #[cfg(test)]
 mod tests {
-    use super::{account_validation_error, hash_password, verify_password};
+    use super::{account_validation_error, hash_password, signup_email_allowed, verify_password};
 
     #[test]
     fn password_hash_verifies_only_the_original_password() {
@@ -296,12 +315,23 @@ mod tests {
     #[test]
     fn account_fields_are_bounded_and_validated() {
         assert_eq!(
-            account_validation_error("Ada", "ada@example.com", "password1"),
+            account_validation_error("Ada", "ada@enzo.health", "password1"),
             None
         );
-        assert!(account_validation_error("", "ada@example.com", "password1").is_some());
+        assert!(account_validation_error("", "ada@enzo.health", "password1").is_some());
         assert!(account_validation_error("Ada", "not-an-email", "password1").is_some());
-        assert!(account_validation_error("Ada", "ada@example.com", "short").is_some());
-        assert!(account_validation_error("Ada", "ada@example.com", &"x".repeat(129)).is_some());
+        assert!(account_validation_error("Ada", "ada@enzo.health", "short").is_some());
+        assert!(account_validation_error("Ada", "ada@enzo.health", &"x".repeat(129)).is_some());
+    }
+
+    #[test]
+    fn signup_is_restricted_to_the_allowed_domain() {
+        assert!(signup_email_allowed("ada@enzo.health"));
+        assert!(signup_email_allowed("  Ada@Enzo.Health  "));
+        assert!(!signup_email_allowed("ada@gmail.com"));
+        assert!(!signup_email_allowed("ada@enzo.health.evil.com"));
+        assert!(!signup_email_allowed("ada@notenzo.health"));
+        // Shape validation stays domain-agnostic; callers gate creation separately.
+        assert_eq!(account_validation_error("Ada", "ada@example.com", "password1"), None);
     }
 }
