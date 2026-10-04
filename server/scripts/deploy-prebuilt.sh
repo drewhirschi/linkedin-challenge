@@ -45,6 +45,24 @@ fi
 npm run typecheck
 
 "${VERCEL[@]}" pull --yes --environment=production > /dev/null
+
+# Migrate BEFORE uploading: every migration is additive, so the running build tolerates the new
+# schema, and a failing migration aborts here instead of crashing every cold start. Preview deploys
+# share the production database, so they migrate it too. Uses the direct (unpooled) connection —
+# DDL through the connection pooler is unreliable.
+PROD_ENV=.vercel/.env.production.local
+if [ ! -f "$PROD_ENV" ]; then
+  echo "ERROR: vercel pull did not produce $PROD_ENV" >&2
+  exit 1
+fi
+MIGRATE_URL=$(set -a; . "$PROD_ENV"; set +a; printf '%s' "${DATABASE_URL_UNPOOLED:-${DATABASE_URL:-}}")
+if [ -z "$MIGRATE_URL" ]; then
+  echo "ERROR: no DATABASE_URL_UNPOOLED or DATABASE_URL in $PROD_ENV" >&2
+  exit 1
+fi
+echo "migrating the production database"
+DATABASE_URL="$MIGRATE_URL" cargo run --quiet --release --bin migrate
+
 "${VERCEL[@]}" build "${FLAGS[@]}"
 
 # Refuse to ship if the Rust function silently failed to build (the classic
